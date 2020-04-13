@@ -1,0 +1,25 @@
+Package: PISCES
+Title: Protein Activity Inferecne in Single Cells
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Lukas",
+           family = "Vlahos",
+           role = c("aut", "cre"),
+           email = "lv2395@cumc.columbia.edu",
+           comment = c(ORCID = "YOUR-ORCID-ID"))
+Description: What the package does (one paragraph).
+License: What license it uses
+Encoding: UTF-8
+LazyData: true
+Imports:
+  Matrix,
+  cluster,
+  MUDAN,
+  ggplot2,
+  ggpubr,
+  pheatmap,
+  biomaRt,
+  viper,
+  Seurat,
+  umap
+RoxygenNote: 7.1.0
