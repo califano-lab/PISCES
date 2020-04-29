@@ -18,8 +18,8 @@ Imports:
   ggplot2,
   ggpubr,
   pheatmap,
+  RColorBrewer,
   biomaRt,
   viper,
-  Seurat,
   umap
 RoxygenNote: 7.1.0

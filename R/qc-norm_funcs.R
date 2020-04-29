@@ -69,7 +69,7 @@ MTFilter <- function(dat.mat, mt.genes, mt.thresh = 0.1) {
 #' @export
 QCTransform <- function(raw.mat, minCount = 1000, maxCount = 100000, minGeneReads = 1) {
   filt.mat <- raw.mat[, colSums(raw.mat) > minCount & colSums(raw.mat) < maxCount]
-  filt.mat <- filt.mat[ rowSums(raw.mat) >= minGeneReads ,]
+  filt.mat <- filt.mat[ rowSums(filt.mat) >= minGeneReads ,]
   rem.genes <- nrow(raw.mat) - nrow(filt.mat); rem.cells <- ncol(raw.mat) - ncol(filt.mat)
   print(paste('Removed ', rem.genes, ' gene(s) and ', rem.cells, ' cell(s).', sep =''))
   return(filt.mat)
