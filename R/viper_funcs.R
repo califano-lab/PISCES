@@ -136,24 +136,22 @@ LogTTest <- function(x, y) {
 #' Identifies MRs based on a bootstraped Ttest between clusters.
 #'
 #' @param dat.mat Matrix of protein activity (proteins X samples).
-#' @param clustering Vector of cluster labels.
+#' @param class.vect Vector of cluster labels / class vectors.
 #' @param bootstrap.num Number of bootstraps to use. Default of 10
 #' @return Returns a list of lists; each list is a vector of sorted log p-values for each cluster.
 #' @export
-BTTestMRs <- function(dat.mat, clustering, bootstrap.num = 100) {
-  # set initial variables
-  clustering <- clustering
-  k <- length(table(clustering))
+BTTestMRs <- function(dat.mat, class.vect, bootstrap.num = 100) {
+  # get class names
+  class.names <- unique(class.vect)
   mrs <- list()
-  # identify MRs for each cluster
-  for (i in 1:k) {
-    print(paste('Identifying MRs for cluster ', i, '...', sep = ''))
+  # iterate thrugh classes
+  for (cn in class.names) { 
+    print(paste('Identifying MRs for class ', cn, '...', sep = ''))
     mrs.mat <- matrix(0L, nrow = nrow(dat.mat), ncol = bootstrap.num)
     rownames(mrs.mat) <- rownames(dat.mat)
     # split test and ref matrices
-    clust <- names(table(clustering))[i]
-    clust.vect <- which(clustering == clust)
-    test.mat <- dat.mat[, clust.vect]; ref.mat <- dat.mat[, -clust.vect]
+    cn.vect <- which(class.vect == cn)
+    test.mat <- dat.mat[, cn.vect]; ref.mat <- dat.mat[, -cn.vect]
     t.n <- ncol(test.mat); r.n <- ncol(ref.mat)
     # for each bootstrap
     for (b in 1:bootstrap.num) {
@@ -166,7 +164,7 @@ BTTestMRs <- function(dat.mat, clustering, bootstrap.num = 100) {
     }
     # sort and add to list
     mList <- sort(rowMeans(mrs.mat), decreasing = TRUE)
-    mrs[[clust]] <- mList
+    mrs[[cn]] <- mList
   }
   # return
   return(mrs)

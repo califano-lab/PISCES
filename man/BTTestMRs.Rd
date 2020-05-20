@@ -4,12 +4,12 @@
 \alias{BTTestMRs}
 \title{Identifies MRs based on a bootstraped Ttest between clusters.}
 \usage{
-BTTestMRs(dat.mat, clustering, bootstrap.num = 100)
+BTTestMRs(dat.mat, class.vect, bootstrap.num = 100)
 }
 \arguments{
 \item{dat.mat}{Matrix of protein activity (proteins X samples).}
 
-\item{clustering}{Vector of cluster labels.}
+\item{class.vect}{Vector of cluster labels / class vectors.}
 
 \item{bootstrap.num}{Number of bootstraps to use. Default of 10}
 }
