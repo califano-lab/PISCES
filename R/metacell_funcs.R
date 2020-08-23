@@ -11,6 +11,7 @@ KNN <- function(dist.mat, k = 5){
   for (i in 1:n) {
     neighbor.mat[i,] <- order(dist.mat[i,])[2:(k + 1)]
   }
+  rownames(neighbor.mat) <- colnames(dist.mat)
   return(neighbor.mat)
 }
 
@@ -20,39 +21,41 @@ KNN <- function(dist.mat, k = 5){
 #' @param dist.mat Distance matrix for this data.
 #' @param clust.vect Clustering vector. If not specified, entire matrix will be used.
 #' @param num.neighbors Number of neighbors to use in metacells. Default of 5.
-#' @param subset Switch to control subsetting to 250 samples for ARACNe. Default of TRUE.
-#' @param cpm.norm Switch to control cpm normalization of meta cell matrix. Default of TRUE.
+#' @param subset Number of cells to subset to. Default of 250. No subsetting if set equal to NULL.
 #' @param min.samps Minimum number of samples in a cluster required for meta cells. Default of 500. 
 #' @return A list of meta cell matrices for all clusters with enough samples.
 #' @export
-MetaCells <- function(counts.mat, dist.mat, clust.vect, num.neighbors = 5, subset = TRUE, cpm.norm = TRUE, min.samps = 500) {
+MetaCells <- function(counts.mat, dist.mat, clust.vect, num.neighbors = 5, subset = 250, min.samps = 500) {
+  counts.mat <- as.matrix(counts.mat)
   dist.mat <- as.matrix(dist.mat)
-  # make dummy clusering if missing
+  # dummy clustering vector if not specified
   if (missing(clust.vect)) {
     clust.vect <- rep(1, ncol(counts.mat))
+    names(clust.vect) <- colnames(counts.mat)
   }
-  # make meta cell matrix for each cluster
-  clust.table <- table(clust.vect)
+  clust.labels <- sort(unique(clust.vect))
+  # metacell matrix for each cluster
   meta.mats <- list()
-  for (clust.name in names(clust.table)) {
-    if (clust.table[clust.name] > min.samps) {
-      # get cluster matrix
-      clust.samps <- which(clust.vect == clust.name)
-      clust.mat <- counts.mat[, clust.samps]
-      clust.dist <- as.dist(dist.mat[clust.samps, clust.samps])
-      # get nearest neighbors
-      knn.neighbors <- KNN(clust.dist, k = num.neighbors)
-      # impute
-      imp.mat <- matrix(0, nrow = nrow(clust.mat), ncol = ncol(clust.mat))
-      rownames(imp.mat) <- rownames(clust.mat); colnames(imp.mat) <- colnames(clust.mat)
-      for (j in 1:ncol(clust.mat)) {
-        neighbor.mat <- clust.mat[, c(j, knn.neighbors[j,])]
-        imp.mat[,j] <- rowSums(neighbor.mat)
+  for (cl in clust.labels) {
+    clust.samps <- names(clust.vect)[which(clust.vect == cl)]
+    if (length(clust.samps) > min.samps) {
+      print(paste("Making metacell matrix for cluster ", cl, "...", sep = ''))
+      # get cluster objects
+      clust.counts <- counts.mat[,clust.samps]
+      clust.dist <- dist.mat[clust.samps, clust.samps]
+      knn.mat <- KNN(clust.dist, k = num.neighbors)
+      sub.samps <- sample(clust.samps, subset)
+      # impute matrix
+      imp.mat <- matrix(0L, nrow = nrow(clust.counts), ncol = subset)
+      rownames(imp.mat) <- rownames(counts.mat); colnames(imp.mat) <- sub.samps
+      for (ss in sub.samps) {
+        neighbor.vect <- c(ss, rownames(knn.mat)[knn.mat[ss,]])
+        ss.mat <- clust.counts[, neighbor.vect]
+        imp.mat[,ss] <- rowSums(ss.mat)
       }
-      # subset, cpm, and store
-      if (subset) { imp.mat <- imp.mat[, sample(colnames(imp.mat), 250)] }
-      if (cpm.norm) { imp.mat <- CPMTransform(imp.mat) }
-      meta.mats[[clust.name]] <- imp.mat
+      # normalize
+      imp.mat <- CPMTransform(imp.mat)
+      meta.mats[[cl]] <- imp.mat
     }
   }
   return(meta.mats)

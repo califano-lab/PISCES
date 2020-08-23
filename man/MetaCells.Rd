@@ -9,8 +9,7 @@ MetaCells(
   dist.mat,
   clust.vect,
   num.neighbors = 5,
-  subset = TRUE,
-  cpm.norm = TRUE,
+  subset = 250,
   min.samps = 500
 )
 }
@@ -23,9 +22,7 @@ MetaCells(
 
 \item{num.neighbors}{Number of neighbors to use in metacells. Default of 5.}
 
-\item{subset}{Switch to control subsetting to 250 samples for ARACNe. Default of TRUE.}
-
-\item{cpm.norm}{Switch to control cpm normalization of meta cell matrix. Default of TRUE.}
+\item{subset}{Number of cells to subset to. Default of 250. No subsetting if set equal to NULL.}
 
 \item{min.samps}{Minimum number of samples in a cluster required for meta cells. Default of 500.}
 }
