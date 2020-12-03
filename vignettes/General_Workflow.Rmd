@@ -1,0 +1,92 @@
+---
+title: "General_Workflow"
+author: Lukas Vlahos, Aleksander Obradovic, Andrea Califano
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{General_Workflow}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Introduction
+
+The pipeline for Protein Activity Inference in Single Cells (PISCES) is a regulatory-network-based methdology for the analysis of single cell gene expression profiles.
+
+PISCES transforms highly variable and noisy single cell gene expression profiles into robust and reproducible protein activity profiles. PISCES  is centered around two key algorithms: the Algorithm for the Reconstruction of Accurate Cellular Networks ARACNe [1]; and the algorithm for  Virtual Inference of Protein-activity by Enriched Regulon analysis (VIPER/metaVIPER) [2,3].
+
+## Install PISCES
+
+To get started, you'll need to install several R packages:
+
+```{r, eval = FALSE}
+install.packages(c("cluster", "ggplot2", "devtools", "Seurat"))
+install_github(repo = "califano-lab/PISCES", force = TRUE, build_vignettes = TRUE)
+
+library(cluster)
+library(ggplot2)
+library(devtools)
+library(Seurat)
+library(PISCES)
+```
+
+## Gene Expression Clustering
+
+The first step of the PISCES pipeline is to perform a clustering analysis in gene expression space. This allows for the separation of broadly different cell types prior to input to ARACNe, which is not designed to generate regulatory networks from heterogeneous data. 
+
+To perform this analysis, we recommend using the Seurat package as shown below. This is just one of many alternatives - any validated methodolgoy of gene expression anaylsis should work here. However, Seurat is well documented as the industry standard. If you'd like to learn more about Seurat, visit the Satija lab page [LINK].
+
+We first load the data and perform quality control:
+
+```{r, eval = FALSE}
+data("pbmc.counts", package = "PISCES")
+seurat.obj <- CreateSeuratObject(counts = pbmc.counts, project = pooled.name, min.cells = 3, min.features = 200)
+seurat.obj[["percent.mt"]] <- PercentageFeatureSet(seurat.obj, pattern = "^mt-")
+seurat.obj <- subset(seurat.obj, subset = nFeature_RNA > 200 & nFeature_RNA < 7000 & percent.mt < 20)
+```
+
+Next, we normalize the data using the `SCTransform` function in Seurat, then identify clusters:
+
+```{r, eval = FALSE}
+seurat.obj <- SCTransform(seurat.obj, vars.to.regress = "percent.mt", verbose = FALSE)
+seurat.obj <- FindClusters(seurat.obj, resolution = res)
+```
+
+Finally, we'll pull a couple of matrices out of the Seurat object. Note that this step is not necessary; if you're comfortable working with the Seurat object, feel free to index into it to access these matrices as you need them. For the purposes of this vignette, saving this data as separate objects will make for easier interpretation.
+
+```{r, eval = FALSE}
+sct.mat <- seurat.obj@assays$SCT@scale.data
+count.mat <- seurat.obj@assays$RNA@counts
+clust.vect <- seurat.obj@active.ident
+```
+
+## Meta Cell Generation and ARACNe
+
+With our gene expression clusters in hand, we now turn to network generation. In order to overcome the shallow depth of most single-cell data, metacells are generated within each cluster by summing up the reads in the `k` nearest neighbor of each cell. If you have a particularly high depth of sequencing, this step may not be necessary.
+
+```{r, eval = FALSE}
+meta.mats <- MetaCells(count.mat, dist.mat, clust.vect)
+for (m.name in names(meta.mats)) {
+  f.name <- paste('data/pbmc_c', m.name, '-meta.rds', sep = '')
+  saveRDS(meta.mats[[m.name]], f.name)
+}
+```
+
+These metacell matrices can now be used as input to ARACNe. In order to effectively do this, you'll need access to computational cluster, as the network generation process is quite computationally intense. PISCES comes with a set of scripts for running ARACNe, but these will likely need to be modified for use with your cluster architecture.
+
+## MetaVIPER
+
+For the purposes of this vignette, we have pre-generated the networks necessary to analyze this PBMC dataset.
+
+## Master Regulator Analysis
+
+## Visualization
+
+
+
