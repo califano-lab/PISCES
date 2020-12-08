@@ -4,10 +4,10 @@
 \alias{QuantileBreaks}
 \title{Genreates breaks for a color scale based on quantiles.}
 \usage{
-QuantileBreaks(xs, n = 10)
+QuantileBreaks(xs, n)
 }
 \arguments{
-\item{n}{Number of breaks to generate. Default of 10.}
+\item{n}{Number of breaks to generate. If not specified, uses first three stdevs.}
 
 \item{dat.mat}{Data matrix (features X samples).}
 }

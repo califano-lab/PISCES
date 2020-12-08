@@ -81,3 +81,30 @@ SilScoreEval <- function(clusterings, dist.mat, plotPath) {
   ## return scores
   return(sil.scores)
 }
+
+#' Silhouette score optimized Louvain clustering.
+#'
+#' @param seurat.obj Seurat object with Neighbors detected.
+#' @param dist.mat Distance matrix for use w/ Silhouette score.
+#' @param rstep Size of the steps to take in resolution. Default of 0.05.
+#' @param rmax Maximum resolution to try. Default of 0.5.
+#' @return Seurat object with all clustering results and optimal result as active.ident.
+#' @export
+SSLouvain <- function(seurat.obj, dist.mat, rstep = 0.05, rmax = 0.5) {
+  sil.scores <- list()
+  res.val <- 0.05
+  # cluster until maximum resolution exceeded
+  while (res.val < rmax) {
+    seurat.obj <- FindClusters(seurat.obj, resolution = res.val)
+    s.clust <- as.integer(seurat.obj@active.ident) - 1
+    s.score <- cluster::silhouette(s.clust, dist = dist.mat)
+    sil.scores[[as.character(res.val)]] <- mean(s.score[,3])
+    # increment resolution
+    res.val <- res.val + rstep
+  }
+  # identify optimal clustering
+  seurat.obj@misc[['gexp.sil.scores']] <- sil.scores
+  opt.clust <- names(sil.scores)[which.max(sil.scores)]
+  Idents(seurat.obj) <- seurat.obj@meta.data[[paste('SCT_snn_res.', opt.clust, sep = '')]]
+  return(seurat.obj)
+}

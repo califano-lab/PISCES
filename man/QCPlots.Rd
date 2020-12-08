@@ -4,12 +4,10 @@
 \alias{QCPlots}
 \title{Generates basic quality control plots from raw gene expression data.}
 \usage{
-QCPlots(raw.mat, mt.genes, plot.path)
+QCPlots(seurat.obj, plot.path)
 }
 \arguments{
-\item{raw.mat}{Matrix of raw gene expression data (genes X samples).}
-
-\item{mt.genes}{Path to .csv file with ENSG and Hugo names for mitochondrial genes.}
+\item{seurat.obj}{A Seurat object w/ MT% added to metadata.}
 
 \item{plot.path}{Optional argumetn of save path for plot.}
 }

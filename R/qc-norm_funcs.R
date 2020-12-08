@@ -1,21 +1,20 @@
 #' Generates basic quality control plots from raw gene expression data.
 #'
-#' @param raw.mat Matrix of raw gene expression data (genes X samples).
-#' @param mt.genes Path to .csv file with ENSG and Hugo names for mitochondrial genes.
+#' @param seurat.obj A Seurat object w/ MT% added to metadata.
 #' @param plot.path Optional argumetn of save path for plot.
 #' @export
-QCPlots <- function(raw.mat, mt.genes, plot.path) {
+QCPlots <- function(seurat.obj, plot.path) {
+  samp.factor <- as.factor(rep('raw', ncol(seurat.obj)))
   ## sequencing depth plot
-  p1.dat <- data.frame('Depth' = colSums(raw.mat), 'Sample' = as.factor(rep('raw', ncol(raw.mat))))
+  p1.dat <- data.frame('Depth' = seurat.obj$nCount_RNA, 'Sample' = samp.factor)
   p1 <- ggplot2::ggplot(p1.dat, ggplot2::aes(x=Sample, y=Depth)) + ggplot2::geom_violin(color = '#F8766D', fill = '#F8766D') +
     ggplot2::theme_bw()
   ## detected gene plot
-  p2.dat <- data.frame('dgenes' = colSums(raw.mat > 0), 'Sample' = as.factor(rep('raw', ncol(raw.mat))))
+  p2.dat <- data.frame('dgenes' = seurat.obj$nFeature_RNA, 'Sample' = samp.factor)
   p2 <- ggplot2::ggplot(p2.dat, ggplot2::aes(x=Sample, y=dgenes)) + ggplot2::geom_violin(color = '#00BA38', fill = '#00BA38') +
     ggplot2::ylab('Datected Genes') + ggplot2::theme_bw()
   ## mt percentage plot
-  mt.perc <- MTPercent(raw.mat, mt.genes)
-  p3.dat <- data.frame('mt' = mt.perc, 'Sample' = as.factor(rep('raw', length(mt.perc))))
+  p3.dat <- data.frame('mt' = seurat.obj$percent.mt, 'Sample' = samp.factor)
   p3 <- ggplot2::ggplot(p3.dat, ggplot2::aes(x=Sample, y=mt)) + ggplot2::geom_violin(color = '#619CFF', fill = '#619CFF') +
     ggplot2::ylab('MT%') + ggplot2::theme_bw()
   ## arrange and plot
@@ -104,4 +103,17 @@ RankTransform <- function(dat.mat) {
   mad <- apply(rank.mat, 1, mad)
   rank.mat <- (rank.mat - median) / mad
   return(rank.mat)
+}
+
+#' Gets the number of PCA features to use from a Seurat object based on the given variance theshold.
+#' 
+#' @param seurat.obj Seurat object with PCA reduction.
+#' @param var.thresh Amount of variance to include. Default of 0.9.
+#' @return Number of PCA features to use.
+#' @export
+GetPCAFeats <- function(seurat.obj, var.thresh = 0.9) {
+  pca.var <- seurat.obj@reductions$pca@stdev**2; pca.var <- pca.var / sum(pca.var)
+  var.sum <- cumsum(pca.var)
+  num.dims <- tail(which(var.sum < var.thresh), 1) + 1
+  return(num.dims)
 }

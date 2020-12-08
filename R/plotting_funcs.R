@@ -12,11 +12,15 @@ ClusterColors <- function(k, offset = 0) {
 #' Genreates breaks for a color scale based on quantiles.
 #'
 #' @param dat.mat Data matrix (features X samples).
-#' @param n Number of breaks to generate. Default of 10.
+#' @param n Number of breaks to generate. If not specified, uses first three stdevs.
 #' @return Numeric vector of break values.
 #' @export
-QuantileBreaks <- function(xs, n = 10) {
-  breaks <- quantile(xs, probs = seq(from = 0, to = 1, length.out = n))
+QuantileBreaks <- function(xs, n) {
+  if (!missing(n)) {
+    breaks <- quantile(xs, probs = seq(from = 0, to = 1, length.out = n))
+  } else {
+    breaks <- quantile(xs, c(0.003, 0.05, 0.32, 0.5, 0.68, 0.95, 0.997))
+  }
   return(unique(breaks))
 }
 
@@ -52,3 +56,22 @@ MarkerGrid <- function(umap, cluster, pAct, markers, plotTitle) {
   marker.plot <- ggpubr::ggarrange(plotlist = plot.list, ncol = nCol, nrow = nRow)
   print(ggpubr::annotate_figure(marker.plot, top = text_grob(plotTitle, size = 24)))
 }
+
+#' Returns color gradient for the specified data type (green/purple for Gene Expression; red/blue for VIPER)
+#'
+#' @param num.breaks Number of breaks in the gradient.
+#' @param data.type Type of data to use; either 'gexp' or 'vip'
+#' @return Vector of colors.
+#' @export
+ColorLevels <- function(num.colors, data.type) {
+  if (data.type == 'gexp') {
+    col.func <- grDevices::colorRampPalette(rev(RColorBrewer::brewer.pal(11, 'PRGn')))
+  } else if (data.type == 'vip') {
+    col.func <- grDevices::colorRampPalette(rev(RColorBrewer::brewer.pal(11, 'RdBu')))
+  } else {
+    print("Error: Not a valid data type; must be one of 'gexp' or 'vip'")
+    return(0)
+  }
+  return(col.func(num.colors))
+}
+

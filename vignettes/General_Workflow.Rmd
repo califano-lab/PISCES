@@ -26,13 +26,15 @@ PISCES transforms highly variable and noisy single cell gene expression profiles
 To get started, you'll need to install several R packages:
 
 ```{r, eval = FALSE}
-install.packages(c("cluster", "ggplot2", "devtools", "Seurat"))
-install_github(repo = "califano-lab/PISCES", force = TRUE, build_vignettes = TRUE)
+install.packages(c("cluster", "ggplot2", "devtools", "Seurat", 
+                   "pheatmap", "BiocManager", "RColorBrewer"))
+BiocManager::install("viper")
+devtools::install_github(repo = "califano-lab/PISCES", force = TRUE, build_vignettes = TRUE)
 
 library(cluster)
 library(ggplot2)
-library(devtools)
 library(Seurat)
+library(viper)
 library(PISCES)
 ```
 
@@ -42,20 +44,33 @@ The first step of the PISCES pipeline is to perform a clustering analysis in gen
 
 To perform this analysis, we recommend using the Seurat package as shown below. This is just one of many alternatives - any validated methodolgoy of gene expression anaylsis should work here. However, Seurat is well documented as the industry standard. If you'd like to learn more about Seurat, visit the Satija lab page [LINK].
 
-We first load the data and perform quality control:
+We first load the data and visualize some quality control metrics:
 
 ```{r, eval = FALSE}
-data("pbmc.counts", package = "PISCES")
-seurat.obj <- CreateSeuratObject(counts = pbmc.counts, project = pooled.name, min.cells = 3, min.features = 200)
-seurat.obj[["percent.mt"]] <- PercentageFeatureSet(seurat.obj, pattern = "^mt-")
-seurat.obj <- subset(seurat.obj, subset = nFeature_RNA > 200 & nFeature_RNA < 7000 & percent.mt < 20)
+data("pbmc", package = "PISCES")
+seurat.obj <- CreateSeuratObject(counts = raw.mat, project = "PBMC", min.cells = 3, min.features = 200)
+mt.features <- intersect(mt.genes$hum.ensg, rownames(seurat.obj))
+seurat.obj[["percent.mt"]] <- PercentageFeatureSet(object = seurat.obj, features = mt.features)
+QCPlots(seurat.obj)
 ```
 
-Next, we normalize the data using the `SCTransform` function in Seurat, then identify clusters:
+Based on this plot, we choose filtration thresholds to remove low quality or outlier cells. Next, we normalize the data using the `SCTransform` function in Seurat:
 
 ```{r, eval = FALSE}
+seurat.obj <- subset(seurat.obj, subset = nCount_RNA > 1000 & nFeature_RNA < 3000 & percent.mt < 10)
 seurat.obj <- SCTransform(seurat.obj, vars.to.regress = "percent.mt", verbose = FALSE)
-seurat.obj <- FindClusters(seurat.obj, resolution = res)
+```
+
+With the data filtered for QC and normalized, we now run a principal component analysis (PCA) and identify a feature set based on the amount of variance we want to capture. These features are then used to build a graph and identify populations with a silhouette score-optimized Louvain clustering:
+
+```{r, eval = FALSE}
+## run PCA and find neighbors
+seurat.obj <- RunPCA(seurat.obj, verbose = FALSE)
+pca.feature.num <- GetPCAFeats(seurat.obj, var.thresh = 0.9)
+seurat.obj <- FindNeighbors(seurat.obj, dims = 1:num.dims)
+## cluster
+dist.mat <- as.dist(1 - cor(seurat.obj@assays$SCT@scale.data))
+seurat.obj <- SSLouvain(seurat.obj, dist.mat)
 ```
 
 Finally, we'll pull a couple of matrices out of the Seurat object. Note that this step is not necessary; if you're comfortable working with the Seurat object, feel free to index into it to access these matrices as you need them. For the purposes of this vignette, saving this data as separate objects will make for easier interpretation.
@@ -67,26 +82,58 @@ clust.vect <- seurat.obj@active.ident
 ```
 
 ## Meta Cell Generation and ARACNe
-
-With our gene expression clusters in hand, we now turn to network generation. In order to overcome the shallow depth of most single-cell data, metacells are generated within each cluster by summing up the reads in the `k` nearest neighbor of each cell. If you have a particularly high depth of sequencing, this step may not be necessary.
+With our gene expression clusters in hand, we now turn to network generation. In order to overcome the shallow depth of most single-cell data, metacells are generated within each cluster by summing up the reads in the `k` nearest neighbor of each cell. If you have a particularly high depth of sequencing, this step may not be necessary. Generally, generating a network from a cluster with fewer than 500 cells that also requires metacell inference due to low depth is inadvisable. In this tutorial, we lower that threshold slightly to permit network generation for three of our four clusters:
 
 ```{r, eval = FALSE}
-meta.mats <- MetaCells(count.mat, dist.mat, clust.vect)
+meta.mats <- MetaCells(count.mat, dist.mat, clust.vect, min.samps = 480)
 for (m.name in names(meta.mats)) {
-  f.name <- paste('data/pbmc_c', m.name, '-meta.rds', sep = '')
+  f.name <- paste('general-workflow/pbmc_c', m.name, '-meta.rds', sep = '')
   saveRDS(meta.mats[[m.name]], f.name)
 }
 ```
 
 These metacell matrices can now be used as input to ARACNe. In order to effectively do this, you'll need access to computational cluster, as the network generation process is quite computationally intense. PISCES comes with a set of scripts for running ARACNe, but these will likely need to be modified for use with your cluster architecture.
 
-## MetaVIPER
+## MetaVIPER and Master Regulator Analysis
 
-For the purposes of this vignette, we have pre-generated the networks necessary to analyze this PBMC dataset.
+For the purposes of this vignette, we have pre-generated the networks necessary to analyze this PBMC dataset. We now load these networks and use them to infer protein activity using VIPER:
 
-## Master Regulator Analysis
+```{r, eval = FALSE}
+```
+
+Next, we generate a distance matrix and find the optimal clustering using silhouette score optimized Louvain clsutering:
+
+```{r, eval = FALSE}
+```
+
+Finally, we identify the Master Regulators (the proteins that are most differentially active between clusters) using a Mann Whitney U-Test:
+
+```{r, eval = FALSE}
+```
 
 ## Visualization
 
+There are two primary avenues of visualization used in PISCES: scatter plots and heatmaps. Scatter plots are useful for getting a rough idea of what the data may look like or for overlaying the activity of specific proteins of interest with clustering solutions. Heatmaps, however, are a superior way of representing data with as many dimensions as a gene expression of protein activity matrix:
+
+We first generate a UMAP representation of the protein activity matrix, then generate a scatter plot showing the cluster labes:
+
+```{r, eval = FALSE}
+vip.umap <- CustomUMAP(vip.mat)
+```
+
+Next, we generate a set of scatter plots overlaying the activity of several proteins of interest:
+
+```{r, eval = FALSE}
+```
+
+Finally, we plot a heatmap of the master regulators for this clustering solution:
+
+
+```{r, eval = FALSE}
+```
+
+## Downstream Analysis
+
+Any further analysis should focus on leverage the master regulators identified by PISCES. These proteins are ideal experimetnal validation candidates or can be used to train machine learning models, for instances.
 
 
