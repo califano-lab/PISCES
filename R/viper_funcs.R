@@ -233,3 +233,18 @@ CBCMRs <- function(dat.mat, numMRs = 25) {
   # return
   return(cbc.mrs)
 }
+
+#' Returns the viperSimilarity of the elements of two matrices.
+#' 
+#' @param mat.1 First matrix (features X columns).
+#' @param mat.2 Second matrix (features X columns).
+#' @return A matrix w/ viperSimilarity for elements of mat.1 crossed with elements of mat.2.
+#' @export
+TwoMatVipSim <- function(mat.1, mat.2) {
+  m1.samp.num <- ncol(mat.1)
+  shared.prots <- intersect(rownames(mat.1), rownames(mat.2))
+  merged.mat <- cbind(mat.1[shared.prots,], mat.2[shared.prots,])
+  vd.mat <- as.matrix(viper::viperSimilarity(merged.mat))
+  vd.mat <- vd.mat[(m1.samp.num + 1):nrow(vd.mat), 1:m1.samp.num]
+  return(vd.mat)
+}

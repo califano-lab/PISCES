@@ -26,7 +26,11 @@ Briefly, the ARACNe  algorithm is  one of the most widely used methods for infer
 Here's how you can install the PISCES package:
 
 ```
-install.packages('devtools')
+install.packages(c("cluster", "ggplot2", "devtools", "Seurat", 
+                   "pheatmap", "BiocManager", "RColorBrewer"))
+BiocManager::install("viper")
+BiocManager::install("biomaRt")
+devtools::install_github("JEFworks/MUDAN")
 devtools::install_github(repo = "califano-lab/PISCES", force = TRUE, build_vignettes = TRUE)
 ```
 

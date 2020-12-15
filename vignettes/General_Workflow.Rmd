@@ -29,6 +29,8 @@ To get started, you'll need to install several R packages:
 install.packages(c("cluster", "ggplot2", "devtools", "Seurat", 
                    "pheatmap", "BiocManager", "RColorBrewer"))
 BiocManager::install("viper")
+BiocManager::install("biomaRt")
+devtools::install_github("JEFworks/MUDAN")
 devtools::install_github(repo = "califano-lab/PISCES", force = TRUE, build_vignettes = TRUE)
 
 library(cluster)
@@ -108,7 +110,7 @@ pbmc.vip <- viper(sct.mat, pbmc.nets, method = 'none')
 Next, we generate a distance matrix and find the optimal clustering using silhouette score optimized Louvain clsutering:
 
 ```{r, eval = FALSE}
-pbmc.vip.dist <- as.dist(viperSimilarity(pbmc.vip))
+pbmc.vip.dist <- as.dist(1 - as.matrix(viperSimilarity(pbmc.vip)))
 vip.clust <- LouvainResRange(pbmc.vip, dist.mat = pbmc.vip.dist, rmax = 310, rstep = 25)
 opt.clust <- sort(vip.clust$clusterings[[which.max(vip.clust$sils)]])
 ```
