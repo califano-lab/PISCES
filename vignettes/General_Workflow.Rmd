@@ -69,9 +69,9 @@ With the data filtered for QC and normalized, we now run a principal component a
 ## run PCA and find neighbors
 seurat.obj <- RunPCA(seurat.obj, verbose = FALSE)
 pca.feature.num <- GetPCAFeats(seurat.obj, var.thresh = 0.9)
-seurat.obj <- FindNeighbors(seurat.obj, dims = 1:num.dims)
+seurat.obj <- FindNeighbors(seurat.obj, dims = 1:pca.feature.num)
 ## cluster
-dist.mat <- as.dist(1 - cor(seurat.obj@assays$SCT@scale.data))
+dist.mat <- as.dist(sqrt(1 - cor(seurat.obj@assays$SCT@scale.data)))
 seurat.obj <- SSLouvain(seurat.obj, dist.mat)
 ```
 
