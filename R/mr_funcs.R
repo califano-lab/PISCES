@@ -38,8 +38,8 @@ MWUMrs <- function(dat.mat, clust.vect) {
   for (cn in clust.names) {
     print(paste('Identifying MRs for cluster', cn))
     # set up labels and test statistics
-    clust.samps <- which(clust.vect == cn); n.1 <- length(clust.samps)
-    ref.samps <- which(clust.vect != cn); n.2 <- length(ref.samps)
+    clust.samps <- names(clust.vect)[which(clust.vect == cn)]; n.1 <- length(clust.samps)
+    ref.samps <- setdiff(names(clust.vect), clust.samps); n.2 <- length(ref.samps)
     u.mean <- (n.1 * n.2) / 2; u.sd <- sqrt((n.1 * n.2 * (n.1 + n.2 + 1)) / 12)
     if (n.1 < 30 | n.2 < 30) { print('WARNING: Group size <30, normal approximation may not be appropriate...') }
     # generate tests; scale; transform to p-value

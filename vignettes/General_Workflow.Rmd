@@ -110,7 +110,7 @@ pbmc.vip <- viper(sct.mat, pbmc.nets, method = 'none')
 Next, we generate a distance matrix and find the optimal clustering using silhouette score optimized Louvain clsutering:
 
 ```{r, eval = FALSE}
-pbmc.vip.dist <- as.dist(1 - as.matrix(viperSimilarity(pbmc.vip)))
+pbmc.vip.dist <- as.dist(sqrt(1 - cor(pbmc.vip)))
 vip.clust <- LouvainResRange(pbmc.vip, dist.mat = pbmc.vip.dist, rmax = 310, rstep = 25)
 opt.clust <- sort(vip.clust$clusterings[[which.max(vip.clust$sils)]])
 ```
