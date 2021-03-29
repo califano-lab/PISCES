@@ -26,7 +26,7 @@ GeneNameConvert <- function(dat.mat, species, from, to) {
   name.map <- name.map[ which(!is.na(name.map[,2])) ,]
   name.map <- name.map[ which(name.map[,2] != '') ,]
   name.map <- name.map[ match(unique(name.map[,2]), name.map[,2]) ,]
-  convert.dat <- dat.mat[ name.map[,1] ,]; rownames(convert.dat) <- name.map[,2]
+  convert.dat <- dat.mat[ as.character(name.map[,1]) ,]; rownames(convert.dat) <- name.map[,2]
   return(convert.dat)
 }
 

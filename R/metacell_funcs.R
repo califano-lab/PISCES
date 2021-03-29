@@ -44,7 +44,11 @@ MetaCells <- function(counts.mat, dist.mat, clust.vect, num.neighbors = 5, subse
       clust.counts <- counts.mat[,clust.samps]
       clust.dist <- dist.mat[clust.samps, clust.samps]
       knn.mat <- KNN(clust.dist, k = num.neighbors)
-      sub.samps <- sample(clust.samps, subset)
+      if (subset == NULL) {
+        sub.samps <- clust.samps
+      } else {
+        sub.samps <- sample(clust.samps, subset)
+      }
       # impute matrix
       imp.mat <- matrix(0L, nrow = nrow(clust.counts), ncol = subset)
       rownames(imp.mat) <- rownames(counts.mat); colnames(imp.mat) <- sub.samps

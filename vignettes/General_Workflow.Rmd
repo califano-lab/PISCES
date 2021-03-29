@@ -163,6 +163,6 @@ pheatmap(plot.mat, main = 'Viper Clustering: Master Regulators', fontsize = 20,
 
 ## Downstream Analysis
 
-Any further analysis should focus on leverage the master regulators identified by PISCES. These proteins are ideal experimetnal validation candidates or can be used to train machine learning models, for instances.
+Any further analysis should focus on leverage the master regulators identified by PISCES. These proteins are ideal experimetnal validation candidates or can be used to train machine learning models, for instance.
 
 
