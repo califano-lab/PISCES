@@ -108,6 +108,18 @@ RankTransform <- function(dat.mat) {
   return(rank.mat)
 }
 
+#' Generates a gene expression signature (GES) using internal normalization.
+#'
+#' @param cpm.mat Matrix of CPM-normalized gene expression data (genes X samples).
+#' @return GES matrix.
+#' @export
+GESTransform <- function(cpm.mat) {
+  ges.mat <- t(apply(cpm.mat, 1, function(x) {
+    (x - mean(x)) / sd(x)
+  }))
+  return(ges.mat)
+}
+
 #' Gets the number of PCA features to use from a Seurat object based on the given variance theshold.
 #' 
 #' @param seurat.obj Seurat object with PCA reduction.

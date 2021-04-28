@@ -14,14 +14,13 @@ LazyData: true
 Imports:
   Matrix,
   cluster,
-  MUDAN,
   ggplot2,
   ggpubr,
   pheatmap,
   RColorBrewer,
   biomaRt,
   viper,
-  umap
+  uwot
 RoxygenNote: 7.1.1
 Suggests: 
     knitr,

@@ -73,14 +73,17 @@ seurat.obj <- FindNeighbors(seurat.obj, dims = 1:pca.feature.num)
 ## cluster
 dist.mat <- as.dist(sqrt(1 - cor(seurat.obj@assays$SCT@scale.data)))
 seurat.obj <- SSLouvain(seurat.obj, dist.mat)
+## visualize
+DimPlot(seurat.obj, reduction = "umap")
 ```
+![](../man/figures/pbmc_seurat-clusts.jpg)
 
-Finally, we'll pull a couple of matrices out of the Seurat object. Note that this step is not necessary; if you're comfortable working with the Seurat object, feel free to index into it to access these matrices as you need them. For the purposes of this vignette, saving this data as separate objects will make for easier interpretation.
+Finally, we'll pull a couple of matrices out of the Seurat object. Note that this step is not necessary; if you're comfortable working with the Seurat object, feel free to index into it to access these matrices as you need them. For the purposes of this vignette, saving this data as separate objects will make for easier interpretation. We'll also generate a gene expression signature (GES) via internal normalization.
 
 ```{r, eval = FALSE}
-sct.mat <- seurat.obj@assays$SCT@scale.data
 count.mat <- seurat.obj@assays$RNA@counts
 clust.vect <- seurat.obj@active.ident
+ges.mat <- GESTransform(CPMTransform(as.matrix(count.mat)))
 ```
 
 ## Meta Cell Generation and ARACNe
@@ -96,7 +99,7 @@ for (m.name in names(meta.mats)) {
 
 These metacell matrices can now be used as input to ARACNe. In order to effectively do this, you'll need access to computational cluster, as the network generation process is quite computationally intense. PISCES comes with a set of scripts for running ARACNe, but these will likely need to be modified for use with your cluster architecture.
 
-## MetaVIPER and Master Regulator Analysis
+## MetaVIPER and Clustering Analysis
 
 For the purposes of this vignette, we have pre-generated the networks necessary to analyze this PBMC dataset. We now load these networks and use them to infer protein activity using VIPER:
 
@@ -104,7 +107,7 @@ For the purposes of this vignette, we have pre-generated the networks necessary 
 ## load networks
 data("pbmc.nets", package = "PISCES")
 ## run metaVIPER
-pbmc.vip <- viper(sct.mat, pbmc.nets, method = 'none')
+pbmc.vip <- viper(ges.mat, pbmc.nets, method = 'none')
 ```
 
 Next, we generate a distance matrix and find the optimal clustering using silhouette score optimized Louvain clsutering:
@@ -115,21 +118,10 @@ vip.clust <- LouvainResRange(pbmc.vip, dist.mat = pbmc.vip.dist, rmax = 310, rst
 opt.clust <- sort(vip.clust$clusterings[[which.max(vip.clust$sils)]])
 ```
 
-Finally, we identify the Master Regulators (the proteins that are most differentially active between clusters) using a Mann Whitney U-Test. Before running this test, we transform from ENSG to gene names for ease of interpretation:
+We can visualize these clusters on a UMAP plot generated in VIPER-space. This fucntionas a rough idea of what the data may look like, and we can also overlay the activity of specific proteins of interest:
 
 ```{r, eval = FALSE}
-pbmc.vip.gn <- GeneNameConvert(pbmc.vip, 'human', 'ensg', 'gn')
-vip.mrs <- MWUMrs(pbmc.vip.gn, opt.clust)
-```
-
-## Visualization
-
-There are two primary avenues of visualization used in PISCES: scatter plots and heatmaps. Scatter plots are useful for getting a rough idea of what the data may look like or for overlaying the activity of specific proteins of interest with clustering solutions. Heatmaps, however, are a superior way of representing data with as many dimensions as a gene expression of protein activity matrix:
-
-We first generate a UMAP representation of the protein activity matrix, then generate a scatter plot showing the cluster labes:
-
-```{r, eval = FALSE}
-vip.umap <- CustomUMAP(pbmc.vip)
+vip.umap <- MakeUMAP(pbmc.vip)
 ## scatter plot
 plot.dat <- data.frame('UMAP1' = vip.umap$layout[names(opt.clust),1], 
                        'UMAP2' = vip.umap$layout[names(opt.clust),2],
@@ -138,11 +130,21 @@ ggplot(plot.dat, aes(UMAP1, UMAP2)) + geom_point(aes(color = Cluster)) + ggtitle
 ```
 ![](../man/figures/pbmc-vip-scatter.jpg)
 
-Finally, we plot a heatmap of the master regulators for this clustering solution:
+
+## Master Regulator Analysis
+
+Finally, we identify the Master Regulators (the proteins that are most differentially active between clusters) using a Mann Whitney U-Test. Before running this test, we transform from ENSG to gene names for ease of interpretation:
+
+```{r, eval = FALSE}
+pbmc.vip.gn <- GeneNameConvert(pbmc.vip, 'human', 'ensg', 'gn')
+vip.mrs <- MWUMrs(pbmc.vip.gn, opt.clust)
+```
+
+We can now visualize the activity of the master regulators using a heatmap. While scatter plots are useful for building intuition, heatmaps are a superior way of representing data with as many dimensions as a gene expression of protein activity matrix:
 
 ```{r, eval = FALSE}
 ## create plot matrix
-num.mrs <- 25
+num.mrs <- 10
 cell.order <- names(opt.clust)
 mr.set <- sapply(vip.mrs, function(x) {names(x$positive[1:num.mrs])})
 mr.set <- unique(unlist(as.list(mr.set)))
