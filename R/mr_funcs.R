@@ -13,16 +13,6 @@ StoufferIntegrate <- function(dat.vect, weight.vect) {
   return(s.int)
 }
 
-#' Master regulators by Stouffer integration.
-#' 
-#' @param dat.mat Matrix of data (features X samples).
-#' @param clust.vect Vector of cluster labels.
-#' @param weight.vect Vector of weights, if specified.
-#' @return Integrated 
-StoufferMRs <- function(dat.mat, clust.vect) {
-  
-}
-
 #' Identifies cluster specific master regulators using the Mann-Whitney U-test.
 #' Approximates p-vals using a normal distribution for n > 30.
 #' 
