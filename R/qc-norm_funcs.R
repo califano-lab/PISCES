@@ -30,92 +30,87 @@ QCPlots <- function(seurat.obj, plot.path) {
   }
 }
 
-#' Returns vector of mitochondrial percentages for the given samples.
+#' Performas a CPM normalization on the counts in the given seurat object or matrix.
+#' If a seurat object, stores results in the data field; otherwise, returns cpm matrix.
 #'
-#' @param dat.mat Matrix of raw gene expression data (genes X samples).
-#' @param species
-#' @retun Returns named vector of mitochondrial gene percentage.
-#' @export
-MTPercent <- function(dat.mat, mt.genes) {
-  mt.count <- colSums(dat.mat[ intersect(rownames(dat.mat), mt.genes) ,])
-  total.count <- colSums(dat.mat)
-  mt.percent <- mt.count / total.count
-  head(mt.percent)
-  return( mt.percent )
-}
-
-#' Filters data based on percentage of mitochondrial gens.
-#'
-#' @param raw.mat Matrix of raw gene expression data (genes X samples)
-#' @param mt.genes Path to .csv file with ENSG and Hugo names for mitochondrial genes.
-#' @param mt.thresh Threshold above which cells will be removed. Default of 0.15
-#' @export
-MTFilter <- function(dat.mat, mt.genes, mt.thresh = 0.1) {
-  ## find mt percentages
-  mt.perc <- MTPercent(dat.mat, mt.genes)
-  ## filter matrix
-  thresh.cells <- names(mt.perc)[which(mt.perc < mt.thresh)]
-  rem.cells <- ncol(dat.mat) - length(thresh.cells)
-  print(paste('Removed', rem.cells, 'cell(s) with too many MT reads', sep = ' '))
-  dat.mat <- dat.mat[, thresh.cells ]
-  return(dat.mat)
-}
-
-#' Filters out genes with no expression and low quality cells.
-#'
-#' @param raw.mat Matrix of raw gene expression data (genes X samples).
-#' @param minCount Minimum number of reads in a cell. Default of 1000.
-#' @param maxCount Maximum number of reads in a cell. Default of 100000.
-#' @param minGeneReads Minimum number of reads for a gene to be kept. Default of 1 (any gene with no reads will be removed).
-#' @return Quality controlled matrix.
-#' @export
-QCTransform <- function(raw.mat, minCount = 1000, maxCount = 100000, minGeneReads = 1) {
-  filt.mat <- raw.mat[, colSums(raw.mat) > minCount & colSums(raw.mat) < maxCount]
-  filt.mat <- filt.mat[ rowSums(filt.mat) >= minGeneReads ,]
-  rem.genes <- nrow(raw.mat) - nrow(filt.mat); rem.cells <- ncol(raw.mat) - ncol(filt.mat)
-  print(paste('Removed ', rem.genes, ' gene(s) and ', rem.cells, ' cell(s).', sep =''))
-  return(filt.mat)
-}
-
-#' Performas a CPM normalization on the counts in the given seurat object; stores result in 'data' field.
-#'
-#' @param dat.mat Matrix of gene expression data (genes X samples).
+#' @param data.object Either a Seurat object or a matrix of raw count data (genes X samples).
 #' @param l2 Optional log2 normalization switch. Default of False.
 #' @param pseudo Optional pseudo count logical. Default of False.
+#' @return CPM matrix, or appropriately adjusted seurat object.
 #' @export
-CPMTransform <- function(seurat.obj, l2 = FALSE, pseudo = FALSE) {
-  dat.mat <- as.matrix(seurat.obj@assays$RNA@counts)
+CPMTransform <- function(data.object, l2 = FALSE, pseudo = FALSE) {
+  # check if seurat object
+  if (class(data.object)[1] == "Seurat") {
+    dat.mat <- as.matrix(seurat.obj@assays$RNA@counts)
+  } else {
+    dat.mat <- data.object
+  }
+  # pseudo count if specified
   if (pseudo) { dat.mat <- dat.mat + 1 }
+  # cpm transform
   cpm.mat <- t(t(dat.mat) / (colSums(dat.mat) / 1e6))
-  if (l2) {
-    cpm.mat <- log2(cpm.mat + 1)
-  } 
-  seurat.obj@assays$RNA@data <- cpm.mat 
+  # log2 if specified
+  if (l2) { cpm.mat <- log2(cpm.mat + 1) } 
+  # return or add to object
+  if (class(data.object)[1] == "Seurat") {
+    seurat.obj@assays$RNA@data <- cpm.mat 
+    return(seurat.obj)
+  } else {
+    return(cpm.mat)
+  }
 }
 
-#' Performs a rank transformation on a given matrix.
+#' Generates a gene expression signature (GES) using internal normalization.
+#' If a seurat object, stores results in scale.data field; otherwise, returns GES matrix.
 #'
-#' @param dat.mat Matrix of data, usually gene expression (genes X samples).
-#' @return Rank transformed matrix.
+#' @param data.object Either a Seurat object or a matrix of raw count data (genes X samples).
+#' @return GES matrix, or appropriately adjusted seurat object.
 #' @export
-RankTransform <- function(dat.mat) {
+GESTransform <- function(data.object) {
+  # check if seurat object
+  if (class(data.object)[1] == "Seurat") {
+    dat.mat <- as.matrix(seurat.obj@assays$RNA@data)
+  } else {
+    dat.mat <- data.object
+  }
+  # generate GES
+  ges.mat <- t(apply(dat.mat, 1, function(x) {
+    (x - mean(x)) / sd(x)
+  }))
+  # return
+  if (class(data.object)[1] == "Seurat") {
+    seurat.obj@assays$RNA@scale.data <- ges.mat 
+    return(seurat.obj)
+  } else {
+    return(ges.mat)
+  }
+}
+
+#' Performs a rank transformation on a given matrix, typically as an alternative GES generation technique.
+#' If a seurat object, stores results in scale.data field; otherwise, returns rank transformation  matrix.
+#'
+#' @param data.object Either a Seurat object or a matrix of raw count data (genes X samples).
+#' @return Rank transformed matrix, or appropriately adjusted seurat object.
+#' @export
+RankTransform <- function(data.object) {
+  # check if seurat object
+  if (class(data.object)[1] == "Seurat") {
+    dat.mat <- as.matrix(seurat.obj@assays$RNA@data)
+  } else {
+    dat.mat <- data.object
+  }
+  # generate transformation
   rank.mat <- apply(dat.mat, 2, rank)
   median <- apply(rank.mat, 1, median)
   mad <- apply(rank.mat, 1, mad)
   rank.mat <- (rank.mat - median) / mad
-  return(rank.mat)
-}
-
-#' Generates a gene expression signature (GES) using internal normalization.
-#'
-#' @param cpm.mat Matrix of CPM-normalized gene expression data (genes X samples).
-#' @return GES matrix.
-#' @export
-GESTransform <- function(cpm.mat) {
-  ges.mat <- t(apply(cpm.mat, 1, function(x) {
-    (x - mean(x)) / sd(x)
-  }))
-  return(ges.mat)
+  # return
+  if (class(data.object)[1] == "Seurat") {
+    seurat.obj@assays$RNA@scale.data <- rank.mat 
+    return(seurat.obj)
+  } else {
+    return(rank.mat)
+  }
 }
 
 #' Gets the number of PCA features to use from a Seurat object based on the given variance theshold.
@@ -129,4 +124,34 @@ GetPCAFeats <- function(seurat.obj, var.thresh = 0.9) {
   var.sum <- cumsum(pca.var)
   num.dims <- tail(which(var.sum < var.thresh), 1) + 1
   return(num.dims)
+}
+
+#' Generates a distance matrix using sqrt(1-cor(x)) as a distance metric.
+#' If a seurat object, stores results in cor.dist (misc); otherwise, returns distance matrix.
+#' 
+#' @param data.object Either a Seurat object or a matrix of data (features X samples).
+#' @param use.scaled If specified AND if data.object is a Seurat object, will use the "scale.data" field instead of "data"
+#' @param cor.method Method argument for cor function; spearman by default.
+#' @return Rank transformed matrix, or appropriately adjusted seurat object.
+#' @export
+CorDist <- function(data.object, use.scaled = FALSE, cor.method = 'spearman') {
+  # check if seurat object
+  if (class(data.object)[1] == "Seurat") {
+    if (use.scaled) {
+      dat.mat <- as.matrix(seurat.obj@assays$RNA@scale.data)
+    } else {
+      dat.mat <- as.matrix(seurat.obj@assays$RNA@data)
+    }
+  } else {
+    dat.mat <- data.object
+  }
+  # generate distane matrix
+  dist.mat <- as.dist(sqrt(1 - cor(dat.mat, method = cor.method)))
+  # return
+  if (class(data.object)[1] == "Seurat") {
+    seurat.obj@misc[['dist.mat']] <- dist.mat 
+    return(seurat.obj)
+  } else {
+    return(dist.mat)
+  }
 }

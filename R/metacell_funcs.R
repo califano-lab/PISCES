@@ -44,7 +44,9 @@ MetaCells <- function(counts.mat, dist.mat, clust.vect, num.neighbors = 5, subse
       clust.counts <- counts.mat[,clust.samps]
       clust.dist <- dist.mat[clust.samps, clust.samps]
       knn.mat <- KNN(clust.dist, k = num.neighbors)
-      if (subset == NULL) {
+      print(subset)
+      print(head(clust.samps))
+      if (is.null(subset)) {
         sub.samps <- clust.samps
       } else {
         sub.samps <- sample(clust.samps, subset)
