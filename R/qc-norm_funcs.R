@@ -77,22 +77,20 @@ QCTransform <- function(raw.mat, minCount = 1000, maxCount = 100000, minGeneRead
   return(filt.mat)
 }
 
-#' Performas a CPM normalization on the given data.
+#' Performas a CPM normalization on the counts in the given seurat object; stores result in 'data' field.
 #'
 #' @param dat.mat Matrix of gene expression data (genes X samples).
 #' @param l2 Optional log2 normalization switch. Default of False.
 #' @param pseudo Optional pseudo count logical. Default of False.
-#' @return Returns CPM normalized matrix
 #' @export
-CPMTransform <- function(dat.mat, l2 = FALSE, pseudo = FALSE) {
-  if (pseudo) {
-    dat.mat <- dat.mat + 1
-  }
+CPMTransform <- function(seurat.obj, l2 = FALSE, pseudo = FALSE) {
+  dat.mat <- as.matrix(seurat.obj@assays$RNA@counts)
+  if (pseudo) { dat.mat <- dat.mat + 1 }
   cpm.mat <- t(t(dat.mat) / (colSums(dat.mat) / 1e6))
   if (l2) {
     cpm.mat <- log2(cpm.mat + 1)
-  }
-  return(cpm.mat)
+  } 
+  seurat.obj@assays$RNA@data <- cpm.mat 
 }
 
 #' Performs a rank transformation on a given matrix.
