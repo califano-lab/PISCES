@@ -1,26 +1,13 @@
-#' Stouffer integrates the given vector of data.
-#' 
-#' @param dat.vect Vector of data to be integrated
-#' @param weight.vect Vector of weights, if specified.
-#' @return Stouffer integrated value for the given data.
-#' @export
-StoufferIntegrate <- function(dat.vect, weight.vect) {
-  if (!missing(weight.vect)) {
-    s.int <- sum(dat.vect * weight.vect) / sqrt(sum(weight.vect**2))
-  } else {
-    s.int <- sum(dat.vect) / length(dat.vect)
-  }
-  return(s.int)
-}
-
 #' Identifies cluster specific master regulators using the Mann-Whitney U-test.
 #' Approximates p-vals using a normal distribution for n > 30.
 #' 
-#' @param dat.mat Matrix of data.
+#' @param dat.object Seurat object w/ PISCES assay and viper matrix in 'misc'.
 #' @param clust.vect Vector of cluster labels.
-#' @return For each cluster, two sorted lists of log p-values, split by positive / negative
+#' @return List of log p-values for pos/neg MRs in each cluster; stored in PISCES assay under 'misc' as 'mwuMRs'
 #' @export
-MWUMrs <- function(dat.mat, clust.vect) {
+MWUMrs <- function(dat.object, clust.vect) {
+  # extract viper matrix
+  dat.mat <- dat.object@assays$PISCES@misc$viper
   # identify cluster names
   clust.names <- unique(clust.vect)
   clust.mrs <- list()
@@ -43,7 +30,24 @@ MWUMrs <- function(dat.mat, clust.vect) {
                      'negative' = sort(clust.logp[which(median.dif == -1)]))
     clust.mrs[[cn]] <- mr.lists
   }
-  return(clust.mrs)
+  # add to object and return
+  dat.object@assays$PISCES@misc[['mwuMRs']] <- clust.mrs
+  return(dat.object)
+}
+
+#' Stouffer integrates the given vector of data.
+#' 
+#' @param dat.vect Vector of data to be integrated
+#' @param weight.vect Vector of weights, if specified.
+#' @return Stouffer integrated value for the given data.
+#' @export
+StoufferIntegrate <- function(dat.vect, weight.vect) {
+  if (!missing(weight.vect)) {
+    s.int <- sum(dat.vect * weight.vect) / sqrt(sum(weight.vect**2))
+  } else {
+    s.int <- sum(dat.vect) / length(dat.vect)
+  }
+  return(s.int)
 }
 
 #' Writes a given master regulator object to tsvs for each group.
@@ -74,4 +78,33 @@ MRTableWrite <- function(mr.obj, file.dir, file.name, num.mrs = 50, top = TRUE, 
   }
 }
 
+#' Unwraps a nested MR list: previous functions return cluster specific master regulators as a list of lists. This funciton will unwrap that object into one, unique list.
+#'
+#' @param MRs List of lists, with MR names as sub-list names and MR activity as sub-list entries.
+#' @param top If specified, will subset the top X regulators from each set.
+#' @return Returns a de-duplicated list of MRs.
+#' @export
+MR_UnWrap <- function(MRs, top) {
+  if (missing(top)) {
+    return( unique(unlist(lapply(MRs, names), use.names = FALSE)) )
+  } else {
+    mr.unwrap <- lapply(MRs, function(x) {
+      names(sort(x, decreasing = TRUE))[ 1:min(top, length(x)) ]
+    })
+    return( unique(unlist(mr.unwrap, use.names = FALSE)) )
+  }
+}
 
+#' Identifies MRs on a cell-by-cell basis and returns a merged, unique list of all such MRs.
+#'
+#' @param dat.mat Matrix of protein activity (proteins X samples).
+#' @param numMRs Default number of MRs to identify in each cell. Default of 25.
+#' @return Returns a list of master regulators, the unique, merged set from all cells.
+#' @export
+CBCMRs <- function(dat.mat, numMRs = 25) {
+  # identify MRs
+  cbc.mrs <- apply(dat.mat, 2, function(x) { names(sort(x, decreasing = TRUE))[1:numMRs] })
+  cbc.mrs <- unique(unlist(as.list(cbc.mrs)))
+  # return
+  return(cbc.mrs)
+}

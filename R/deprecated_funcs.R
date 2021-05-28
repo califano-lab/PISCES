@@ -142,3 +142,84 @@ MTFilter <- function(dat.mat, mt.genes, mt.thresh = 0.1) {
   dat.mat <- dat.mat[, thresh.cells ]
   return(dat.mat)
 }
+
+#' Identifies MRs for given data using stouffer integration.
+#'
+#' @param dat.mat Matrix of protein activity (proteins X samples).
+#' @param cluster Vector of cluster lables. If not included, integrates the entire matrix.
+#' @param weights A named vector of sample weights. If included, stouffer integration is weighted.
+#' @return Returns the stouffer integrated scores for each protien.
+#' @export
+StoufferMRs <- function(dat.mat, cluster, weights) {
+  # generate dummy weights if missing
+  if (missing(weights)) {
+    weights <- as.numeric(rep(1, ncol(dat.mat))); names(weights) <- colnames(dat.mat)
+  }
+  # perform integration across full matrix if cluster was missing
+  if (missing(cluster)) {
+    sInt <- rowSums(t(t(dat.mat) * weights))
+    sInt <- rowSums(t(t(dat.mat) * weights)) / sqrt(sum(weights ** 2))
+    return(sort(sInt, decreasing = TRUE))
+  }
+  # separate cluster specific matrices
+  k <- length(table(cluster))
+  mrs <- list()
+  for (i in 1:k) { # for each cluster
+    clust.cells <- names(cluster)[which(cluster == i)]
+    clust.mat <- dat.mat[, clust.cells]
+    clust.weights <- weights[clust.cells]
+    clust.mrs <- StoufferMRs(clust.mat, weights = clust.weights)
+    mrs[[paste('c', i, sep = '')]] <- sort(clust.mrs, decreasing = TRUE)
+  }
+  return(mrs)
+}
+
+#' Returns the master regulators for the given data.
+#'
+#' @param dat.mat Matrix of protein activity (proteins X samples).
+#' @param method 'Stouffer' or 'ANOVA'
+#' @param clustering Optional argument for a vector of cluster labels.
+#' @param numMRs Number of MRs to return per cluster. Default of 50.
+#' @param bottom Switch to return downregulated proteins in MR list. Default FALSE>
+#' @param weights Optional argument for weights, which can be used in the Stouffer method.
+#' @return Returns a list of master regulators, or a list of lists if a clustring is specified.
+#' @export
+GetMRs <- function(dat.mat, clustering, method, numMRs = 50, bottom = FALSE, weights, ...) {
+  if (method == 'ANOVA') {
+    mr.vals <- AnovaMRs(dat.mat, clustering)
+  } else if (method == 'Stouffer') {
+    # generate dummy weights if not specified
+    if (missing(weights)) {
+      weights <- rep(1, ncol(dat.mat))
+      names(weights) <- colnames(dat.mat)
+    }
+    # recursive calls for each cluster
+    if (missing(clustering)) { # no clustering specified
+      mr.vals <- StoufferMRs(dat.mat, weights)
+    } else {
+      k <- length(table(clustering))
+      mrs <- list()
+      for (i in 1:k) {
+        # get cluster specific matrix and weights
+        clust.cells <- names(which(clustering == i))
+        clust.mat <- dat.mat[, clust.cells]
+        print(dim(clust.mat))
+        clust.weights <- weights[clust.cells]
+        # find mrs and add to list
+        clust.mrs <- GetMRs(clust.mat, method = method, weights = clust.weights, numMRs = numMRs, bottom = bottom)
+        print(head(clust.mrs))
+        mrs[[paste('c', i, sep = '')]] <- clust.mrs
+      }
+      return(mrs)
+    }
+  } else {
+    print('Invalid method: must be "Stouffer" or "ANOVA".')
+  }
+  # return appropriate portion of MR list
+  mr.vals <- sort(mr.vals, decreasing = TRUE)
+  if (bottom) {
+    return(c(mr.vals[1:numMRs], tail(mr.vals, numMRs)))
+  } else {
+    return(mr.vals[1:numMRs])
+  }
+}

@@ -1,3 +1,23 @@
+#' Runs VIPER on a seurat.obj that has the appropriately generated 'PISCES' assay and scaled data.
+#' 
+#' @param seurat.obj Seurat object w/ 'PISCES' assay and scaled data.
+#' @param net.list List of networks OR a single network.
+#' @return Seurat.object with added 'viper' matrix in PISCES assay
+#' @export
+PISCESViper <- function(seurat.obj, net.list) {
+  # check for PISCES assay
+  if (!('PISCES' %in% Assays(seurat.obj))) {
+    print('Error: No PISCES assay detected')
+    return(seurat.obj)
+  }
+  # run viper
+  vip.mat <- viper::viper(seurat.obj@assays$PISCES@scale.data, net.list, 
+                          method = 'none', eset.filter = FALSE)
+  # add to object
+  seurat.obj@assays$PISCES@misc[['viper']] <- vip.mat
+  return(seurat.obj)
+}
+
 #' Merges two viper matrices, giving priority to one over the other.
 #'
 #' @param p.mat Priority viper matrix (proteins X samples). Proteins here will override those in the other matrix.
@@ -24,116 +44,72 @@ RegProcess <- function(a.file, exp.mat, out.dir, out.name = '.') {
   saveRDS(pruned.reg, file = paste(out.dir, out.name, 'pruned.rds', sep = ''))
 }
 
-#' Unwraps a nested MR list: previous functions return cluster specific master regulators as a list of lists. This funciton will unwrap that object into one, unique list.
-#'
-#' @param MRs List of lists, with MR names as sub-list names and MR activity as sub-list entries.
-#' @param top If specified, will subset the top X regulators from each set.
-#' @return Returns a de-duplicated list of MRs.
-#' @export
-MR_UnWrap <- function(MRs, top) {
-  if (missing(top)) {
-    return( unique(unlist(lapply(MRs, names), use.names = FALSE)) )
-  } else {
-    mr.unwrap <- lapply(MRs, function(x) {
-      names(sort(x, decreasing = TRUE))[ 1:min(top, length(x)) ]
-    })
-    return( unique(unlist(mr.unwrap, use.names = FALSE)) )
+#' MetaVIPER implementation that will perform a weighted stouffer integration based on highest NES.
+#' 
+#' @param ges Gene Expression Signature (features X samples)
+#' @param net.list List object with the networks to be used
+#' @param use.nets Optional argument to sslect the top n networks. If not specified, all networks are used.  
+#' @param ret.weights Optional argument to return the network weight matrix as well as the VIPER matrix. FALSE by default.
+#' @return Either a viper matrix, or a list with a viper matrix and the network weight matrix.
+WeightedVIPER <- function(ges, net.list, use.nets, ret.weights = FALSE) {
+  require(viper)
+  num.nets <- length(net.list)
+  num.samps <- ncol(ges)
+  ## create weight matrix
+  w.mat <- matrix(0L, nrow = num.nets, ncol = ncol(ges))
+  colnames(w.mat) <- colnames(ges); rownames(w.mat) <- names(net.list)
+  ## run VIPER with each network
+  print('Generating VIPER matrices...')
+  vip.list <- list()
+  for (i in 1:num.nets) {
+    vip.list[[i]] <- viper(ges, net.list[i], method = 'none')
   }
-}
-
-#' Identifies MRs for given data using stouffer integration.
-#'
-#' @param dat.mat Matrix of protein activity (proteins X samples).
-#' @param cluster Vector of cluster lables. If not included, integrates the entire matrix.
-#' @param weights A named vector of sample weights. If included, stouffer integration is weighted.
-#' @return Returns the stouffer integrated scores for each protien.
-#' @export
-StoufferMRs <- function(dat.mat, cluster, weights) {
-  # generate dummy weights if missing
-  if (missing(weights)) {
-    weights <- as.numeric(rep(1, ncol(dat.mat))); names(weights) <- colnames(dat.mat)
-  }
-  # perform integration across full matrix if cluster was missing
-  if (missing(cluster)) {
-    sInt <- rowSums(t(t(dat.mat) * weights))
-    sInt <- rowSums(t(t(dat.mat) * weights)) / sqrt(sum(weights ** 2))
-    return(sort(sInt, decreasing = TRUE))
-  }
-  # separate cluster specific matrices
-  k <- length(table(cluster))
-  mrs <- list()
-  for (i in 1:k) { # for each cluster
-    clust.cells <- names(cluster)[which(cluster == i)]
-    clust.mat <- dat.mat[, clust.cells]
-    clust.weights <- weights[clust.cells]
-    clust.mrs <- StoufferMRs(clust.mat, weights = clust.weights)
-    mrs[[paste('c', i, sep = '')]] <- sort(clust.mrs, decreasing = TRUE)
-  }
-  return(mrs)
-}
-
-#' Returns the master regulators for the given data.
-#'
-#' @param dat.mat Matrix of protein activity (proteins X samples).
-#' @param method 'Stouffer' or 'ANOVA'
-#' @param clustering Optional argument for a vector of cluster labels.
-#' @param numMRs Number of MRs to return per cluster. Default of 50.
-#' @param bottom Switch to return downregulated proteins in MR list. Default FALSE>
-#' @param weights Optional argument for weights, which can be used in the Stouffer method.
-#' @return Returns a list of master regulators, or a list of lists if a clustring is specified.
-#' @export
-GetMRs <- function(dat.mat, clustering, method, numMRs = 50, bottom = FALSE, weights, ...) {
-  if (method == 'ANOVA') {
-    mr.vals <- AnovaMRs(dat.mat, clustering)
-  } else if (method == 'Stouffer') {
-    # generate dummy weights if not specified
-    if (missing(weights)) {
-      weights <- rep(1, ncol(dat.mat))
-      names(weights) <- colnames(dat.mat)
+  names(vip.list) <- names(net.list)
+  ## count for each gene
+  print('Generating weights...')
+  uni.genes <- unique(unlist(lapply(vip.list, rownames)))
+  for (g in uni.genes) {
+    for (s in 1:num.samps) {
+      nes.vals <- unlist(lapply(vip.list, function(x){ 
+        if (g %in% rownames(x)) {
+          return(x[g,s])
+        } else {
+          return(0)
+        }}))
+      max.ind <- which.max(abs(nes.vals))
+      w.mat[max.ind, s] <- w.mat[max.ind, s] + 1
     }
-    # recursive calls for each cluster
-    if (missing(clustering)) { # no clustering specified
-      mr.vals <- StoufferMRs(dat.mat, weights)
-    } else {
-      k <- length(table(clustering))
-      mrs <- list()
-      for (i in 1:k) {
-        # get cluster specific matrix and weights
-        clust.cells <- names(which(clustering == i))
-        clust.mat <- dat.mat[, clust.cells]
-        print(dim(clust.mat))
-        clust.weights <- weights[clust.cells]
-        # find mrs and add to list
-        clust.mrs <- GetMRs(clust.mat, method = method, weights = clust.weights, numMRs = numMRs, bottom = bottom)
-        print(head(clust.mrs))
-        mrs[[paste('c', i, sep = '')]] <- clust.mrs
+  }
+  ## integration
+  print('Integrating...')
+  int.mat <- matrix(0L, nrow = length(uni.genes), ncol = num.samps)
+  rownames(int.mat) <- uni.genes; colnames(int.mat) <- colnames(ges)
+  for (g in uni.genes) {
+    for (s in 1:num.samps) {
+      nes.vals <- unlist(lapply(vip.list, function(x){ 
+        if (g %in% rownames(x)) {
+          return(x[g,s])
+        } else {
+          return(NA)
+        }}))
+      w.vals <- w.mat[,s][!is.na(nes.vals)]
+      w.vals <- w.vals / sum(w.vals)
+      nes.vals <- nes.vals[!is.na(nes.vals)]
+      # if use.nets are specified, subset to the top n (or use all if n > length)
+      if (!missing(use.nets)) {
+        w.order <- order(w.vals, decreasing = TRUE)
+        w.vals <- w.vals[ w.order[1:min(length(w.order), use.nets)] ]
+        nes.vals <- nes.vals[ w.order[1:min(length(nes.vals), use.nets)] ]
       }
-      return(mrs)
+      int.mat[g,s] <- sum(nes.vals * w.vals) / sqrt(sum(w.vals**2))
     }
-  } else {
-    print('Invalid method: must be "Stouffer" or "ANOVA".')
   }
-  # return appropriate portion of MR list
-  mr.vals <- sort(mr.vals, decreasing = TRUE)
-  if (bottom) {
-    return(c(mr.vals[1:numMRs], tail(mr.vals, numMRs)))
+  ## return
+  if (ret.weights) {
+    return( list('viper' = int.mat, 'weights' = w.mat) )
   } else {
-    return(mr.vals[1:numMRs])
+    return( int.mat )
   }
-}
-
-#' Identifies MRs on a cell-by-cell basis and returns a merged, unique list of all such MRs.
-#'
-#' @param dat.mat Matrix of protein activity (proteins X samples).
-#' @param numMRs Default number of MRs to identify in each cell. Default of 25.
-#' @return Returns a list of master regulators, the unique, merged set from all cells.
-#' @export
-CBCMRs <- function(dat.mat, numMRs = 25) {
-  # identify MRs
-  cbc.mrs <- apply(dat.mat, 2, function(x) { names(sort(x, decreasing = TRUE))[1:numMRs] })
-  cbc.mrs <- unique(unlist(as.list(cbc.mrs)))
-  # return
-  return(cbc.mrs)
 }
 
 #' Returns the viperSimilarity of the elements of two matrices.

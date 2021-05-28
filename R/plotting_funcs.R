@@ -75,3 +75,34 @@ ColorLevels <- function(num.colors, data.type) {
   return(col.func(num.colors))
 }
 
+#' Generates basic quality control plots from raw gene expression data.
+#'
+#' @param seurat.obj A Seurat object w/ MT% added to metadata.
+#' @param plot.path Optional argumetn of save path for plot.
+#' @export
+QCPlots <- function(seurat.obj, plot.path) {
+  samp.factor <- as.factor(rep('raw', ncol(seurat.obj)))
+  ## sequencing depth plot
+  p1.dat <- data.frame('Depth' = seurat.obj$nCount_RNA, 'Sample' = samp.factor)
+  p1 <- ggplot2::ggplot(p1.dat, ggplot2::aes(x=Sample, y=Depth)) + ggplot2::geom_violin(color = '#F8766D', fill = '#F8766D') +
+    ggplot2::ylab('Depth') + ggplot2::xlab('') + ggplot2::theme_bw() + 
+    ggplot2::theme(axis.text.x=ggplot2::element_blank())
+  ## detected gene plot
+  p2.dat <- data.frame('dgenes' = seurat.obj$nFeature_RNA, 'Sample' = samp.factor)
+  p2 <- ggplot2::ggplot(p2.dat, ggplot2::aes(x=Sample, y=dgenes)) + ggplot2::geom_violin(color = '#00BA38', fill = '#00BA38') +
+    ggplot2::ylab('Detected Genes') + ggplot2::xlab('') + ggplot2::theme_bw() + 
+    ggplot2::theme(axis.text.x=ggplot2::element_blank())
+  ## mt percentage plot
+  p3.dat <- data.frame('mt' = seurat.obj$percent.mt, 'Sample' = samp.factor)
+  p3 <- ggplot2::ggplot(p3.dat, ggplot2::aes(x=Sample, y=mt)) + ggplot2::geom_violin(color = '#619CFF', fill = '#619CFF') +
+    ggplot2::ylab('MT%') + ggplot2::xlab('') + ggplot2::theme_bw() + 
+    ggplot2::theme(axis.text.x=ggplot2::element_blank())
+  ## arrange and plot
+  if (!missing(plot.path)) {
+    jpeg(plot.path, height = 600, width = 1000)
+    print(ggpubr::ggarrange(plotlist = list(p1, p2, p3), ncol = 3))
+    dev.off()
+  } else {
+    ggpubr::ggarrange(plotlist = list(p1, p2, p3), ncol = 3)
+  }
+}

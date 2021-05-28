@@ -1,33 +1,12 @@
-#' Generates basic quality control plots from raw gene expression data.
-#'
-#' @param seurat.obj A Seurat object w/ MT% added to metadata.
-#' @param plot.path Optional argumetn of save path for plot.
+#' Adds a named assay 'PISCES' to a Seurat object.
+#' 
+#' @param seurat.obj Seurat object w/ RNA assay.
+#' @return Seurat object w/ original assay and added 'PISCES' assay.
 #' @export
-QCPlots <- function(seurat.obj, plot.path) {
-  samp.factor <- as.factor(rep('raw', ncol(seurat.obj)))
-  ## sequencing depth plot
-  p1.dat <- data.frame('Depth' = seurat.obj$nCount_RNA, 'Sample' = samp.factor)
-  p1 <- ggplot2::ggplot(p1.dat, ggplot2::aes(x=Sample, y=Depth)) + ggplot2::geom_violin(color = '#F8766D', fill = '#F8766D') +
-    ggplot2::ylab('Depth') + ggplot2::xlab('') + ggplot2::theme_bw() + 
-    ggplot2::theme(axis.text.x=ggplot2::element_blank())
-  ## detected gene plot
-  p2.dat <- data.frame('dgenes' = seurat.obj$nFeature_RNA, 'Sample' = samp.factor)
-  p2 <- ggplot2::ggplot(p2.dat, ggplot2::aes(x=Sample, y=dgenes)) + ggplot2::geom_violin(color = '#00BA38', fill = '#00BA38') +
-    ggplot2::ylab('Detected Genes') + ggplot2::xlab('') + ggplot2::theme_bw() + 
-    ggplot2::theme(axis.text.x=ggplot2::element_blank())
-  ## mt percentage plot
-  p3.dat <- data.frame('mt' = seurat.obj$percent.mt, 'Sample' = samp.factor)
-  p3 <- ggplot2::ggplot(p3.dat, ggplot2::aes(x=Sample, y=mt)) + ggplot2::geom_violin(color = '#619CFF', fill = '#619CFF') +
-    ggplot2::ylab('MT%') + ggplot2::xlab('') + ggplot2::theme_bw() + 
-    ggplot2::theme(axis.text.x=ggplot2::element_blank())
-  ## arrange and plot
-  if (!missing(plot.path)) {
-    jpeg(plot.path, height = 600, width = 1000)
-    print(ggpubr::ggarrange(plotlist = list(p1, p2, p3), ncol = 3))
-    dev.off()
-  } else {
-    ggpubr::ggarrange(plotlist = list(p1, p2, p3), ncol = 3)
-  }
+AddPISCESAssay <- function(seurat.obj) {
+  pisces.assay <- CreateAssayObject(counts = seurat.obj@assays$RNA@counts)
+  seurat.obj[['PISCES']] <- pisces.assay
+  return(seurat.obj)
 }
 
 #' Performas a CPM normalization on the counts in the given seurat object or matrix.
@@ -41,7 +20,10 @@ QCPlots <- function(seurat.obj, plot.path) {
 CPMTransform <- function(data.object, l2 = FALSE, pseudo = FALSE) {
   # check if seurat object
   if (class(data.object)[1] == "Seurat") {
-    dat.mat <- as.matrix(seurat.obj@assays$RNA@counts)
+    if (!('PISCES' %in% Assays(data.object))) {
+      data.object <- AddPISCESAssay(data.object)
+    }
+    dat.mat <- as.matrix(data.object@assays$PISCES@counts)
   } else {
     dat.mat <- data.object
   }
@@ -53,8 +35,8 @@ CPMTransform <- function(data.object, l2 = FALSE, pseudo = FALSE) {
   if (l2) { cpm.mat <- log2(cpm.mat + 1) } 
   # return or add to object
   if (class(data.object)[1] == "Seurat") {
-    seurat.obj@assays$RNA@data <- cpm.mat 
-    return(seurat.obj)
+    data.object@assays$PISCES@data <- cpm.mat 
+    return(data.object)
   } else {
     return(cpm.mat)
   }
@@ -69,7 +51,10 @@ CPMTransform <- function(data.object, l2 = FALSE, pseudo = FALSE) {
 GESTransform <- function(data.object) {
   # check if seurat object
   if (class(data.object)[1] == "Seurat") {
-    dat.mat <- as.matrix(seurat.obj@assays$RNA@data)
+    if (!('PISCES' %in% Assays(data.object))) {
+      data.object <- AddPISCESAssay(data.object)
+    }
+    dat.mat <- as.matrix(data.object@assays$PISCES@counts)
   } else {
     dat.mat <- data.object
   }
@@ -79,8 +64,8 @@ GESTransform <- function(data.object) {
   }))
   # return
   if (class(data.object)[1] == "Seurat") {
-    seurat.obj@assays$RNA@scale.data <- ges.mat 
-    return(seurat.obj)
+    data.object@assays$PISCES@scale.data <- ges.mat 
+    return(data.object)
   } else {
     return(ges.mat)
   }
@@ -95,7 +80,10 @@ GESTransform <- function(data.object) {
 RankTransform <- function(data.object) {
   # check if seurat object
   if (class(data.object)[1] == "Seurat") {
-    dat.mat <- as.matrix(seurat.obj@assays$RNA@data)
+    if (!('PISCES' %in% Assays(data.object))) {
+      data.object <- AddPISCESAssay(data.object)
+    }
+    dat.mat <- as.matrix(data.object@assays$PISCES@counts)
   } else {
     dat.mat <- data.object
   }
@@ -106,24 +94,11 @@ RankTransform <- function(data.object) {
   rank.mat <- (rank.mat - median) / mad
   # return
   if (class(data.object)[1] == "Seurat") {
-    seurat.obj@assays$RNA@scale.data <- rank.mat 
-    return(seurat.obj)
+    data.object@assays$PISCES@scale.data <- rank.mat 
+    return(data.object)
   } else {
     return(rank.mat)
   }
-}
-
-#' Gets the number of PCA features to use from a Seurat object based on the given variance theshold.
-#' 
-#' @param seurat.obj Seurat object with PCA reduction.
-#' @param var.thresh Amount of variance to include. Default of 0.9.
-#' @return Number of PCA features to use.
-#' @export
-GetPCAFeats <- function(seurat.obj, var.thresh = 0.9) {
-  pca.var <- seurat.obj@reductions$pca@stdev**2; pca.var <- pca.var / sum(pca.var)
-  var.sum <- cumsum(pca.var)
-  num.dims <- tail(which(var.sum < var.thresh), 1) + 1
-  return(num.dims)
 }
 
 #' Generates a distance matrix using sqrt(1-cor(x)) as a distance metric.
