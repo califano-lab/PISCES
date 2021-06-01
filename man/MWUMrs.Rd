@@ -5,15 +5,15 @@
 \title{Identifies cluster specific master regulators using the Mann-Whitney U-test.
 Approximates p-vals using a normal distribution for n > 30.}
 \usage{
-MWUMrs(dat.mat, clust.vect)
+MWUMrs(dat.object, clust.vect)
 }
 \arguments{
-\item{dat.mat}{Matrix of data.}
+\item{dat.object}{Seurat object w/ PISCES assay and viper matrix in 'misc'.}
 
 \item{clust.vect}{Vector of cluster labels.}
 }
 \value{
-For each cluster, two sorted lists of log p-values, split by positive / negative
+List of log p-values for pos/neg MRs in each cluster; stored in PISCES assay under 'misc' as 'mwuMRs'
 }
 \description{
 Identifies cluster specific master regulators using the Mann-Whitney U-test.
