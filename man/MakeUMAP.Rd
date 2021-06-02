@@ -14,7 +14,7 @@ MakeUMAP(dat.object, cbc = FALSE, num.feats = 10)
 \item{num.feats}{Number of features to use if cbc flag is TRUE. Default of 10.}
 }
 \value{
-A 2-column mantrix w/ UMAP coordinates.
+Modified Seurat object w/ UMAP object in misc$umap
 }
 \description{
 Builds a UMAP using the uwot package. Optionally can subset to most significant data within each sample.

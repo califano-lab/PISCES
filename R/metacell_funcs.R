@@ -34,7 +34,6 @@ MetaCells <- function(counts.mat, dist.mat, clust.vect, num.neighbors = 5, subse
     names(clust.vect) <- colnames(counts.mat)
   }
   clust.labels <- sort(unique(clust.vect))
-  print(clust.labels)
   # metacell matrix for each cluster
   meta.mats <- list()
   for (cl in clust.labels) {
@@ -45,8 +44,6 @@ MetaCells <- function(counts.mat, dist.mat, clust.vect, num.neighbors = 5, subse
       clust.counts <- counts.mat[,clust.samps]
       clust.dist <- dist.mat[clust.samps, clust.samps]
       knn.mat <- KNN(clust.dist, k = num.neighbors)
-      print(subset)
-      print(head(clust.samps))
       if (is.null(subset)) {
         sub.samps <- clust.samps
       } else {

@@ -9,7 +9,7 @@ ClusterColors <- function(k, offset = 0) {
   return(hcl(h = hues, l = 65, c = 100)[1:k])
 }
 
-#' Genreates breaks for a color scale based on quantiles.
+#' Generates breaks for a color scale based on quantiles.
 #'
 #' @param dat.mat Data matrix (features X samples).
 #' @param n Number of breaks to generate. If not specified, uses first three stdevs.
@@ -78,7 +78,7 @@ ColorLevels <- function(num.colors, data.type) {
 #' Generates basic quality control plots from raw gene expression data.
 #'
 #' @param seurat.obj A Seurat object w/ MT% added to metadata.
-#' @param plot.path Optional argumetn of save path for plot.
+#' @param plot.path Optional argument of save path for plot.
 #' @export
 QCPlots <- function(seurat.obj, plot.path) {
   samp.factor <- as.factor(rep('raw', ncol(seurat.obj)))
@@ -105,4 +105,44 @@ QCPlots <- function(seurat.obj, plot.path) {
   } else {
     ggpubr::ggarrange(plotlist = list(p1, p2, p3), ncol = 3)
   }
+}
+
+#' Generates a heatmap of the cluster-specific master regulators.
+#' 
+#' @param pisces.obj Seurat object w/ PISCES assay, VIPER matrix, and master regulators.
+#' @param num.mrs Number of master regulators to include for each plot. Default of 10.
+#' @param clust.vect Optional argument for cluster labels; if not included, uses "PISCES;misc$pisces.cluster"
+#' @param plot.title Optional plot title argument. If not specified, no title included.
+#' @return Returns the pheatmap plot object.
+#' @export
+MRHeatmap <- function(pisces.obj, num.mrs = 10, clust.vect, plot.title = '') {
+  # check for PISCES assay
+  if (!('PISCES' %in% Assays(pisces.obj))) {
+    print("Error: No PISCES assay in supplied object...")
+    return(NULL)
+  }
+  # fetch objects
+  vip.mat <- pisces.obj@assays$PISCES@scale.data
+  vip.mrs <- pisces.obj@assays$PISCES@misc$mwuMRs
+  vip.mrs <- vip.mrs[order(names(vip.mrs))]
+  if (missing(clust.vect)) {
+    clust.vect <- pisces.obj@assays$PISCES@misc$pisces.cluster
+  }
+  # build mr set
+  mr.set <- unique(unlist(lapply(vip.mrs, function(x) {names(x$positive[1:num.mrs])} )))
+  # build plot matrix and color breaks
+  cell.order <- names(sort(clust.vect))
+  plot.mat <- vip.mat[mr.set, cell.order]
+  mat.breaks <- QuantileBreaks(plot.mat, 100)
+  # cluster annotation
+  annot.df <- data.frame('Cluster' = as.factor(clust.vect))
+  clust.colors <- ClusterColors(length(unique(clust.vect))); names(clust.colors) <- sort(unique(clust.vect))
+  annot.color <- list('Cluster' = clust.colors)
+  # make plot
+  plot.obj <- pheatmap::pheatmap(plot.mat, main = plot.title, 
+                                 annotation_col = annot.df, annotation_colors = annot.color,
+                                 cluster_cols = FALSE, show_colnames = FALSE,
+                                 cluster_rows = FALSE, show_rownames = TRUE,
+                                 breaks = mat.breaks, color = ColorLevels(length(mat.breaks) - 1, 'vip'))
+  return(plot.obj)
 }

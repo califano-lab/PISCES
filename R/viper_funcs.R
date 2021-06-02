@@ -11,10 +11,10 @@ PISCESViper <- function(seurat.obj, net.list) {
     return(seurat.obj)
   }
   # run viper
-  vip.mat <- viper::viper(seurat.obj@assays$PISCES@scale.data, net.list, 
+  vip.mat <- viper::viper(seurat.obj@assays$PISCES@misc$GES, net.list, 
                           method = 'none', eset.filter = FALSE)
   # add to object
-  seurat.obj@assays$PISCES@misc[['viper']] <- vip.mat
+  seurat.obj@assays$PISCES@scale.data <- vip.mat
   return(seurat.obj)
 }
 

@@ -1,13 +1,17 @@
 #' Identifies cluster specific master regulators using the Mann-Whitney U-test.
 #' Approximates p-vals using a normal distribution for n > 30.
 #' 
-#' @param dat.object Seurat object w/ PISCES assay and viper matrix in 'misc'.
-#' @param clust.vect Vector of cluster labels.
+#' @param dat.object Seurat object w/ PISCES assay and viper matrix in 'scale.data'.
+#' @param clust.vect Vector of cluster labels; if not specified, will use 'PISCES;misc$pisces.cluster' as the cluster labels
 #' @return List of log p-values for pos/neg MRs in each cluster; stored in PISCES assay under 'misc' as 'mwuMRs'
 #' @export
 MWUMrs <- function(dat.object, clust.vect) {
   # extract viper matrix
-  dat.mat <- dat.object@assays$PISCES@misc$viper
+  dat.mat <- dat.object@assays$PISCES@scale.data
+  # get cluster vector if not specified
+  if (missing(clust.vect)) {
+    clust.vect <- dat.object@assays$PISCES@misc$pisces.cluster
+  }
   # identify cluster names
   clust.names <- unique(clust.vect)
   clust.mrs <- list()

@@ -3,7 +3,7 @@
 \name{GESTransform}
 \alias{GESTransform}
 \title{Generates a gene expression signature (GES) using internal normalization.
-If a seurat object, stores results in scale.data field; otherwise, returns GES matrix.}
+If a seurat object, stores results in misc$GES; otherwise, returns GES matrix.}
 \usage{
 GESTransform(data.object)
 }
@@ -15,5 +15,5 @@ GES matrix, or appropriately adjusted seurat object.
 }
 \description{
 Generates a gene expression signature (GES) using internal normalization.
-If a seurat object, stores results in scale.data field; otherwise, returns GES matrix.
+If a seurat object, stores results in misc$GES; otherwise, returns GES matrix.
 }

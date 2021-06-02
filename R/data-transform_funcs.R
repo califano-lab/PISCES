@@ -6,6 +6,7 @@
 AddPISCESAssay <- function(seurat.obj) {
   pisces.assay <- CreateAssayObject(counts = seurat.obj@assays$RNA@counts)
   seurat.obj[['PISCES']] <- pisces.assay
+  seurat.obj@active.assay <- 'PISCES'
   return(seurat.obj)
 }
 
@@ -43,7 +44,7 @@ CPMTransform <- function(data.object, l2 = FALSE, pseudo = FALSE) {
 }
 
 #' Generates a gene expression signature (GES) using internal normalization.
-#' If a seurat object, stores results in scale.data field; otherwise, returns GES matrix.
+#' If a seurat object, stores results in misc$GES; otherwise, returns GES matrix.
 #'
 #' @param data.object Either a Seurat object or a matrix of raw count data (genes X samples).
 #' @return GES matrix, or appropriately adjusted seurat object.
@@ -64,7 +65,7 @@ GESTransform <- function(data.object) {
   }))
   # return
   if (class(data.object)[1] == "Seurat") {
-    data.object@assays$PISCES@scale.data <- ges.mat 
+    data.object@assays$PISCES@misc[['GES']] <- ges.mat 
     return(data.object)
   } else {
     return(ges.mat)
@@ -72,12 +73,12 @@ GESTransform <- function(data.object) {
 }
 
 #' Performs a rank transformation on a given matrix, typically as an alternative GES generation technique.
-#' If a seurat object, stores results in scale.data field; otherwise, returns rank transformation  matrix.
+#' If a seurat object, stores results in misc$GES; otherwise, returns GES matrix.
 #'
 #' @param data.object Either a Seurat object or a matrix of raw count data (genes X samples).
 #' @return Rank transformed matrix, or appropriately adjusted seurat object.
 #' @export
-RankTransform <- function(data.object) {
+RankGES <- function(data.object) {
   # check if seurat object
   if (class(data.object)[1] == "Seurat") {
     if (!('PISCES' %in% Assays(data.object))) {
@@ -94,7 +95,7 @@ RankTransform <- function(data.object) {
   rank.mat <- (rank.mat - median) / mad
   # return
   if (class(data.object)[1] == "Seurat") {
-    data.object@assays$PISCES@scale.data <- rank.mat 
+    data.object@assays$PISCES@misc[['GES']] <- rank.mat 
     return(data.object)
   } else {
     return(rank.mat)
@@ -105,18 +106,13 @@ RankTransform <- function(data.object) {
 #' If a seurat object, stores results in cor.dist (misc); otherwise, returns distance matrix.
 #' 
 #' @param data.object Either a Seurat object or a matrix of data (features X samples).
-#' @param use.scaled If specified AND if data.object is a Seurat object, will use the "scale.data" field instead of "data"
 #' @param cor.method Method argument for cor function; spearman by default.
 #' @return Rank transformed matrix, or appropriately adjusted seurat object.
 #' @export
-CorDist <- function(data.object, use.scaled = FALSE, cor.method = 'spearman') {
+CorDist <- function(data.object, cor.method = 'spearman') {
   # check if seurat object
   if (class(data.object)[1] == "Seurat") {
-    if (use.scaled) {
-      dat.mat <- as.matrix(seurat.obj@assays$RNA@scale.data)
-    } else {
-      dat.mat <- as.matrix(seurat.obj@assays$RNA@data)
-    }
+    dat.mat <- as.matrix(data.object@assays[[data.object@active.assay]]@scale.data)
   } else {
     dat.mat <- data.object
   }
@@ -124,8 +120,8 @@ CorDist <- function(data.object, use.scaled = FALSE, cor.method = 'spearman') {
   dist.mat <- as.dist(sqrt(1 - cor(dat.mat, method = cor.method)))
   # return
   if (class(data.object)[1] == "Seurat") {
-    seurat.obj@misc[['dist.mat']] <- dist.mat 
-    return(seurat.obj)
+    data.object@assays[[data.object@active.assay]]@misc[['dist.mat']] <- dist.mat 
+    return(data.object)
   } else {
     return(dist.mat)
   }

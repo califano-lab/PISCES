@@ -9,7 +9,7 @@ QCPlots(seurat.obj, plot.path)
 \arguments{
 \item{seurat.obj}{A Seurat object w/ MT% added to metadata.}
 
-\item{plot.path}{Optional argumetn of save path for plot.}
+\item{plot.path}{Optional argument of save path for plot.}
 }
 \description{
 Generates basic quality control plots from raw gene expression data.

@@ -4,20 +4,9 @@
 \alias{LouvainResRange}
 \title{Louvain clustering over a range of resolution parameters (uses getComMembership from the MUDAN package)}
 \usage{
-LouvainResRange(
-  dat.mat,
-  dist.mat,
-  rmin = 10,
-  rmax = 100,
-  rstep = 10,
-  verbose = TRUE
-)
+LouvainResRange(data.obj, rmin = 10, rmax = 100, rstep = 10, verbose = TRUE)
 }
 \arguments{
-\item{dat.mat}{Matrix of data (features X samples)}
-
-\item{dist.mat}{Distance matrix}
-
 \item{rmin}{Lowest resolution to try. Default of 10.}
 
 \item{rmax}{Maximum resolution to try. Default of 100.}
@@ -25,9 +14,8 @@ LouvainResRange(
 \item{rstep}{Step size for resolution parameter. Default of 10.}
 
 \item{verbose}{Switch to control terminal read out of progress. Default of TRUE.}
-}
-\value{
-A list of two lists; 'clusterings', which contains the cluster labels and 'sils', which has silhouette scores
+
+\item{data.object}{Seurat object w/ scale.data and a distance matrix in misc$dist.mat included.}
 }
 \description{
 Louvain clustering over a range of resolution parameters (uses getComMembership from the MUDAN package)

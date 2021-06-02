@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting_funcs.R
 \name{QuantileBreaks}
 \alias{QuantileBreaks}
-\title{Genreates breaks for a color scale based on quantiles.}
+\title{Generates breaks for a color scale based on quantiles.}
 \usage{
 QuantileBreaks(xs, n)
 }
@@ -15,5 +15,5 @@ QuantileBreaks(xs, n)
 Numeric vector of break values.
 }
 \description{
-Genreates breaks for a color scale based on quantiles.
+Generates breaks for a color scale based on quantiles.
 }

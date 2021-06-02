@@ -24,15 +24,16 @@ PamKRange <- function(dist.mat, kmin = 2, kmax = 5, verbose = TRUE) {
 
 #' Louvain clustering over a range of resolution parameters (uses getComMembership from the MUDAN package)
 #'
-#' @param dat.mat Matrix of data (features X samples)
-#' @param dist.mat Distance matrix
+#' @param data.object Seurat object w/ scale.data and a distance matrix in misc$dist.mat included.
 #' @param rmin Lowest resolution to try. Default of 10.
 #' @param rmax Maximum resolution to try. Default of 100.
 #' @param rstep Step size for resolution parameter. Default of 10.
 #' @param verbose Switch to control terminal read out of progress. Default of TRUE.
-#' @return A list of two lists; 'clusterings', which contains the cluster labels and 'sils', which has silhouette scores
 #' @export
-LouvainResRange <- function(dat.mat, dist.mat, rmin = 10, rmax = 100, rstep = 10, verbose = TRUE) {
+LouvainResRange <- function(data.obj, rmin = 10, rmax = 100, rstep = 10, verbose = TRUE) {
+  # get matrices
+  dat.mat <- data.obj@assays[[data.obj@active.assay]]@scale.data
+  dist.mat <- data.obj@assays[[data.obj@active.assay]]@misc$dist.mat
   # iterate through resolution params
   res <- rmin
   clusterings <- list()
@@ -49,7 +50,12 @@ LouvainResRange <- function(dat.mat, dist.mat, rmin = 10, rmax = 100, rstep = 10
     # iterate resolution param
     res <- res + rstep
   }
-  return(list('clusterings' = clusterings, 'sils' = sils))
+  # identify optimal cluster
+  opt.clust <- clusterings[[which.max(sils)]]
+  # add to data.object
+  data.obj@assays[[data.obj@active.assay]]@misc[['pisces.cluster']] <- opt.clust
+  data.obj@assays[[data.obj@active.assay]]@misc[['clustering.obj']] <- list('clusterings' = clusterings, 'sils' = sils)
+  return(data.obj)
 }
 
 #' Generation of silhouette score for a list of clusters.
