@@ -26,35 +26,29 @@ QuantileBreaks <- function(xs, n) {
 
 #' Creates a grid of plots for the given markers that exist in the given matrix.
 #'
-#' @param umap UMAP object generated from the 'UMAP' package
-#' @param cluster Vector of cluster labels for each sample
-#' @param pAct Matrix of protein activity (features X samples).
-#' @param markers List of markers of interest.
-#' @param plotTitle Title for the plot.
-#' @return NULL
+#' @param data.object Seurat object w/ PISCES assay, VIPER, and misc$umap
+#' @param marker.list List of gene names w/ markers of interest.
+#' @return Plot object from ggarrange
 #' @export
-MarkerGrid <- function(umap, cluster, pAct, markers, plotTitle) {
-  # create plot data frame
-  plot.dat <- data.frame('UMAP1' = umap$layout[,1], 'UMAP2' = umap$layout[,2],
-                         'clust' = cluster)
-  marker.mat <- t(pAct[ intersect(markers, rownames(pAct)) ,])
-  plot.dat <- cbind(plot.dat, as.data.frame(marker.mat))
-  # create plots
-  clust.plot <- ggplot2::ggplot(plot.dat, ggplot2::aes(x = UMAP1, y = UMAP2, color = clust)) + ggplot2::geom_point() +
-    ggplot2::ggtitle('Clusters')
-  plot.list <- list('Clusters' = clust.plot)
-  for (i in 4:ncol(plot.dat)) { # creat a plot for each marker and add to list
-    m <- colnames(plot.dat)[i]
-    m.plot <- ggplot2::ggplot(plot.dat, ggplot2::aes_string(x = 'UMAP1', y = 'UMAP2', color = m)) + ggplot2::geom_point() +
-      ggplot2::ggtitle(m) + ggplot2::scale_colour_gradientn(colours = c('blue', 'white', 'red'))
-    plot.list[[m]] <- m.plot
+MarkerGrid <- function(vip.obj, marker.list) {
+  # prune marker.list
+  marker.list <- intersect(marker.list, rownames(vip.obj@assays$PISCES@scale.data))
+  # make plot.dat
+  plot.dat <- data.frame('UMAP1' = vip.obj@assays$PISCES@misc$umap[,1],
+                         'UMAP2' = vip.obj@assays$PISCES@misc$umap[,2])
+  plot.dat <- cbind(plot.dat, t(vip.obj@assays$PISCES@scale.data[marker.list,]))
+  # make plots
+  plot.list <- list()
+  for (p in colnames(plot.dat)[3:ncol(plot.dat)]) {
+    plot.list[[p]] <- ggplot(plot.dat, aes(UMAP1, UMAP2)) + geom_point(aes_string(color = p)) +
+      ggtitle(p) + scale_colour_gradient2(low = 'blue', mid = 'white', high = 'red')
   }
-  # determine dimensions
+  # arrange
   nCol <- min(3, length(plot.list))
   nRow <- ceiling(length(plot.list) / nCol)
-  # arrange plots
-  marker.plot <- ggpubr::ggarrange(plotlist = plot.list, ncol = nCol, nrow = nRow)
-  print(ggpubr::annotate_figure(marker.plot, top = text_grob(plotTitle, size = 24)))
+  # plot object
+  plot.obj <- ggpubr::ggarrange(plotlist = plot.list, ncol = nCol, nrow = nRow)
+  return(plot.obj)
 }
 
 #' Returns color gradient for the specified data type (green/purple for Gene Expression; red/blue for VIPER)
@@ -145,4 +139,24 @@ MRHeatmap <- function(pisces.obj, num.mrs = 10, clust.vect, plot.title = '') {
                                  cluster_rows = FALSE, show_rownames = TRUE,
                                  breaks = mat.breaks, color = ColorLevels(length(mat.breaks) - 1, 'vip'))
   return(plot.obj)
+}
+
+#' Generates a scatter plot of the clusters; must have 'umap' object in 'misc'
+#' 
+#' @param pisces.obj Seurat object w/ PISCES assay, VIPER matrix, and master regulators.
+#' @param clust.vect Optional argument for cluster labels; if not included, uses "PISCES;misc$pisces.cluster"
+#' @return Returns ggplot object
+#' @export
+PlotClusters <- function(pisces.obj, clust.vect) {
+  # get clustering from object
+  if (missing(clust.vect)) {
+    clust.vect <- pisces.obj@assays$PISCES@misc$pisces.cluster
+  }
+  # make plot.dat
+  plot.dat <- data.frame('UMAP1' = pisces.obj@assays$PISCES@misc$umap[,1],
+                         'UMAP2' = pisces.obj@assays$PISCES@misc$umap[,2],
+                         'Cluster' = as.factor(clust.vect))
+  # return plot
+  clust.plot <- ggplot(plot.dat, aes(UMAP1, UMAP2)) + geom_point(aes(color = Cluster))
+  return(clust.plot)
 }

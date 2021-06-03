@@ -4,18 +4,15 @@
 \alias{MarkerGrid}
 \title{Creates a grid of plots for the given markers that exist in the given matrix.}
 \usage{
-MarkerGrid(umap, cluster, pAct, markers, plotTitle)
+MarkerGrid(vip.obj, marker.list)
 }
 \arguments{
-\item{umap}{UMAP object generated from the 'UMAP' package}
+\item{marker.list}{List of gene names w/ markers of interest.}
 
-\item{cluster}{Vector of cluster labels for each sample}
-
-\item{pAct}{Matrix of protein activity (features X samples).}
-
-\item{markers}{List of markers of interest.}
-
-\item{plotTitle}{Title for the plot.}
+\item{data.object}{Seurat object w/ PISCES assay, VIPER, and misc$umap}
+}
+\value{
+Plot object from ggarrange
 }
 \description{
 Creates a grid of plots for the given markers that exist in the given matrix.
