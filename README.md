@@ -31,20 +31,8 @@ install.packages(c("cluster", "ggplot2", "devtools", "Seurat",
 BiocManager::install("viper")
 BiocManager::install("biomaRt")
 devtools::install_github("JEFworks/MUDAN")
-devtools::install_github(repo = "califano-lab/PISCES", force = TRUE, build_vignettes = TRUE)
+devtools::install_github(repo = "califano-lab/PISCES")
 ```
-
-You can then learn about how to use PISCES with our vignettes:
-
-```
-library(PISCES)
-browseVignettes(package = "PISCES")
-```
-
-Some other features we're working on right now:
-* Vignette demonstating the functionality of MWKMeans for analyzing trajectories
-* Manuscript for citation
-* RCPP ARACNe for easier network generation
 
 ### References
 
