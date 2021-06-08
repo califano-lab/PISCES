@@ -1,6 +1,7 @@
 ---
-title: "general-workflow"
+title: "General Workflow"
 output: rmarkdown::html_vignette
+fig_width: 8
 vignette: >
   %\VignetteIndexEntry{general-workflow}
   %\VignetteEngine{knitr::rmarkdown}
