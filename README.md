@@ -34,7 +34,6 @@ BiocManager::install("biomaRt")
 devtools::install_github("JEFworks/MUDAN")
 devtools::install_github(repo = "califano-lab/PISCES", force = TRUE, build_vignettes = TRUE)
 ```
-
 You can then learn about how to use PISCES with our vignettes:
 
 ```
@@ -46,6 +45,7 @@ Some other features we're working on right now:
 * Vignette demonstating the functionality of MWKMeans for analyzing trajectories
 * RCPP ARACNe for easier network generation
 
+=======
 ### References
 
 1.	Lachmann, A., et al., *ARACNe-AP: gene network reverse engineering through adaptive partitioning inference of mutual information*. Bioinformatics, 2016. 32(14): p. 2233-5.  
