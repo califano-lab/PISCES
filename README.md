@@ -2,15 +2,15 @@
 title: "PISCES Tutorial"
 authors: 
  - Lukas Vlahos
- - Aleksander Obradovic
+ - Aleksandar Obradovic
  - Pasquale Laise
  - Andrea Califano
 ---
-**Authors:** Lukas Vlahos, Aleksander Obradovic, Pasquale Laise, Andrea Califano  
+**Authors:** Lukas Vlahos, Aleksandar Obradovic, Pasquale Laise, Andrea Califano  
 **Contacts:**
 
 * Lukas Vlahos: lv2395@cumc.columbia.edu
-* Aleksander Obradovic: azo2104@cumc.columbia.edu
+* Aleksandar Obradovic: azo2104@cumc.columbia.edu
 
 ### Overview
 
