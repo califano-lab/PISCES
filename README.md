@@ -2,24 +2,25 @@
 title: "PISCES Tutorial"
 authors: 
  - Lukas Vlahos
+ - Aleksander Obradovic
  - Pasquale Laise
  - Andrea Califano
 ---
-**Authors:** Lukas Vlahos, Pasquale Laise, Andrea Califano  
-**Correspondence:** Pasquale Laise and Andrea Califano  
+**Authors:** Lukas Vlahos, Aleksander Obradovic, Pasquale Laise, Andrea Califano  
 **Contacts:**
 
 * Lukas Vlahos: lv2395@cumc.columbia.edu
-* Pasquale Laise: pl2959@cumc.columbia.edu
-* Andrea Califano: ac2248@cumc.columbia.edu
+* Aleksander Obradovic: azo2104@cumc.columbia.edu
 
-### Introduction
+### Overview
 
 The pipeline for Protein Activity Inference in Single Cells (PISCES) is a regulatory-network-based methdology for the analysis of single cell gene expression profiles.
 
-PISCES transforms highly variable and noisy single cell gene expression profiles into robust and reproducible protein activity profiles. PISCES  is centered around two key algorithms: the Algorithm for the Reconstruction of Accurate Cellular Networks ARACNe [1]; and the algorithm for  Virtual Inference of Protein-activity by Enriched Regulon analysis (VIPER/metaVIPER) [2,3].
+PISCES transforms highly variable and noisy single cell gene expression profiles into robust and reproducible protein activity profiles. PISCES is centered around two key algorithms: the Algorithm for the Reconstruction of Accurate Cellular Networks ARACNe [1]; and the algorithm for  Virtual Inference of Protein-activity by Enriched Regulon analysis (VIPER/metaVIPER) [2,3]. 
 
 Briefly, the ARACNe  algorithm is  one of the most widely used methods for inferring transcriptional interactions from gene expression data. The VIPER algorithm uses the expression of the ARACNe-inferred regulatory targets of a given protein, such as the targets of a transcription factor (TF), as an accurate reporter of its activity. Typically, PISCES  can accurately assess the activity of up to 6000 regulatory proteins  from single cell gene expression profiles,  significantly increasing the ability to analyze the biological function and relevance of gene products whose mRNAs are undetectable in individual cells (e.g. dropout effect).
+
+Currently, the PISCES manuscript is available on bioRxiv: https://doi.org/10.1101/2021.05.20.445002
 
 ### Installation
 
@@ -43,7 +44,6 @@ browseVignettes(package = "PISCES")
 
 Some other features we're working on right now:
 * Vignette demonstating the functionality of MWKMeans for analyzing trajectories
-* Manuscript for citation
 * RCPP ARACNe for easier network generation
 
 ### References

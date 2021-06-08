@@ -3,7 +3,6 @@
 #' @param dat.mat Matrix of protein activity (proteins X samples).
 #' @param clustering Clustering vector
 #' @return A named vector of p-values for each protein
-#' @export
 AnovaMRs <- function(dat.mat, clustering) {
   pVals <- c()
   group.vec <- clustering[colnames(dat.mat)]
@@ -26,7 +25,6 @@ AnovaMRs <- function(dat.mat, clustering) {
 #' @param y Vector of reference values.
 #' @param bootstrap.num Number of bootstraps to use. Default of 100.
 #' @return A signed log p-value.
-#' @export
 LogBootstrapTTest <- function(x, y, bootstrap.num = 100) {
   x.n <- length(x); y.n <- length(y)
   log.pValue <- c()
@@ -52,7 +50,6 @@ LogBootstrapTTest <- function(x, y, bootstrap.num = 100) {
 #' @param y Vector of reference values.
 #' @param bootstrap.num Number of bootstraps to use. Default of 100.
 #' @return A signed log p-value.
-#' @export
 LogTTest <- function(x, y) {
   test.res <- t.test(x, y, alternative = 'two.sided')
   log.p <- 2*pt(q = abs(test.res$statistic), df = floor(test.res$parameter), log.p = TRUE, lower.tail = FALSE)*(-sign(test.res$statistic))
@@ -65,7 +62,6 @@ LogTTest <- function(x, y) {
 #' @param class.vect Vector of cluster labels / class vectors.
 #' @param bootstrap.num Number of bootstraps to use. Default of 10
 #' @return Returns a list of lists; each list is a vector of sorted log p-values for each cluster.
-#' @export
 BTTestMRs <- function(dat.mat, class.vect, bootstrap.num = 100) {
   # get class names
   class.names <- unique(class.vect)
@@ -103,7 +99,6 @@ BTTestMRs <- function(dat.mat, class.vect, bootstrap.num = 100) {
 #' @param maxCount Maximum number of reads in a cell. Default of 100000.
 #' @param minGeneReads Minimum number of reads for a gene to be kept. Default of 1 (any gene with no reads will be removed).
 #' @return Quality controlled matrix.
-#' @export
 QCTransform <- function(raw.mat, minCount = 1000, maxCount = 100000, minGeneReads = 1) {
   filt.mat <- raw.mat[, colSums(raw.mat) > minCount & colSums(raw.mat) < maxCount]
   filt.mat <- filt.mat[ rowSums(filt.mat) >= minGeneReads ,]
@@ -116,8 +111,7 @@ QCTransform <- function(raw.mat, minCount = 1000, maxCount = 100000, minGeneRead
 #'
 #' @param dat.mat Matrix of raw gene expression data (genes X samples).
 #' @param species
-#' @retun Returns named vector of mitochondrial gene percentage.
-#' @export
+#' @return Returns named vector of mitochondrial gene percentage.
 MTPercent <- function(dat.mat, mt.genes) {
   mt.count <- colSums(dat.mat[ intersect(rownames(dat.mat), mt.genes) ,])
   total.count <- colSums(dat.mat)
@@ -131,7 +125,6 @@ MTPercent <- function(dat.mat, mt.genes) {
 #' @param raw.mat Matrix of raw gene expression data (genes X samples)
 #' @param mt.genes Path to .csv file with ENSG and Hugo names for mitochondrial genes.
 #' @param mt.thresh Threshold above which cells will be removed. Default of 0.15
-#' @export
 MTFilter <- function(dat.mat, mt.genes, mt.thresh = 0.1) {
   ## find mt percentages
   mt.perc <- MTPercent(dat.mat, mt.genes)
@@ -149,7 +142,6 @@ MTFilter <- function(dat.mat, mt.genes, mt.thresh = 0.1) {
 #' @param cluster Vector of cluster lables. If not included, integrates the entire matrix.
 #' @param weights A named vector of sample weights. If included, stouffer integration is weighted.
 #' @return Returns the stouffer integrated scores for each protien.
-#' @export
 StoufferMRs <- function(dat.mat, cluster, weights) {
   # generate dummy weights if missing
   if (missing(weights)) {
@@ -183,7 +175,6 @@ StoufferMRs <- function(dat.mat, cluster, weights) {
 #' @param bottom Switch to return downregulated proteins in MR list. Default FALSE>
 #' @param weights Optional argument for weights, which can be used in the Stouffer method.
 #' @return Returns a list of master regulators, or a list of lists if a clustring is specified.
-#' @export
 GetMRs <- function(dat.mat, clustering, method, numMRs = 50, bottom = FALSE, weights, ...) {
   if (method == 'ANOVA') {
     mr.vals <- AnovaMRs(dat.mat, clustering)

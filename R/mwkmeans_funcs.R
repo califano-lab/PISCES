@@ -1,6 +1,6 @@
 #' Calculates the value of the objective function for optimizing cluster assignments.
 #'
-#' @param j
+#' @param j 
 #' @param jPrime
 #' @param x
 #' @return

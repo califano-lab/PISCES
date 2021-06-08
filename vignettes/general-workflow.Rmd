@@ -1,0 +1,69 @@
+---
+title: "general-workflow"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{general-workflow}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+### Introduction
+
+The pipeline for Protein Activity Inference in Single Cells (PISCES) is a regulatory-network-based methdology for the analysis of single cell gene expression profiles.
+
+PISCES transforms highly variable and noisy single cell gene expression profiles into robust and reproducible protein activity profiles. PISCES  is centered around two key algorithms: the Algorithm for the Reconstruction of Accurate Cellular Networks ARACNe [1]; and the algorithm for  Virtual Inference of Protein-activity by Enriched Regulon analysis (VIPER/metaVIPER) [2,3].
+
+Briefly, the ARACNe  algorithm is  one of the most widely used methods for inferring transcriptional interactions from gene expression data. The VIPER algorithm uses the expression of the ARACNe-inferred regulatory targets of a given protein, such as the targets of a transcription factor (TF), as an accurate reporter of its activity. Typically, PISCES  can accurately assess the activity of up to 6000 regulatory proteins  from single cell gene expression profiles,  significantly increasing the ability to analyze the biological function and relevance of gene products whose mRNAs are undetectable in individual cells (e.g. dropout effect).
+
+### Setup
+
+PISCES is implemented in R and requires the following packages:
+
+* viper (v1.18.1)
+* Seurat
+* MUDAN
+* biomaRt
+* uwot
+* Matrix
+* ggplot2
+* ggpubr
+* pheatmap
+* RColorBrewer
+
+You can install these packages, along with PISCES itself, with the following code:
+
+```{r eval=FALSE}
+## CRAN packages
+install.packages("BiocManager", "devtools",
+                 "ggplot2", "ggpubr", "RColorBrewer", "pheatmap",
+                 "Seurat", "uwot")
+## BioConductor packages
+BiocManager::install("viper")
+BiocManager::install("biomaRt")
+## GitHub packages
+devtools::install_github("JEFworks/MUDAN")
+devtools::install_github("califano-lab/PISCES")
+```
+
+To get started in this vignette, load the packages you'll need into your workspace:
+
+```{r eval=FALSE}
+library(PISCES)
+library(Seurat)
+library(ggplot2)
+```
+
+### Load Data
+
+
+
+### QC
+
+### Gene Expression Clustering
+
+### Network Generation
+
+### Protein Activity Inference
+
+### Clustering and Master Regulator Analysis
+
