@@ -6,8 +6,12 @@
 #' @return List of log p-values for pos/neg MRs in each cluster; stored in PISCES assay under 'misc' as 'mwuMRs'
 #' @export
 MWUMrs <- function(dat.object, clust.vect) {
-  # extract viper matrix
-  dat.mat <- dat.object@assays$PISCES@scale.data
+  # check if seurat object
+  if (class(dat.object)[1] == "Seurat") {
+    dat.mat <- dat.object@assays$PISCES@scale.data
+  } else {
+    dat.mat <- dat.object
+  }
   # get cluster vector if not specified
   if (missing(clust.vect)) {
     clust.vect <- dat.object@assays$PISCES@misc$pisces.cluster
@@ -35,8 +39,12 @@ MWUMrs <- function(dat.object, clust.vect) {
     clust.mrs[[cn]] <- mr.lists
   }
   # add to object and return
-  dat.object@assays$PISCES@misc[['mwuMRs']] <- clust.mrs
-  return(dat.object)
+  if (class(dat.object)[1] == "Seurat") {
+    dat.object@assays$PISCES@misc[['mwuMRs']] <- clust.mrs
+    return(dat.object)
+  } else {
+    return(clust.mrs)
+  }
 }
 
 #' Stouffer integrates the given vector of data.

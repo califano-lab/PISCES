@@ -42,6 +42,7 @@ MetaCells <- function(counts.mat, dist.mat, clust.vect, num.neighbors = 5, subse
       print(paste("Making metacell matrix for cluster ", cl, "...", sep = ''))
       # get cluster objects
       clust.counts <- counts.mat[,clust.samps]
+      print(dim(dist.mat))
       clust.dist <- dist.mat[clust.samps, clust.samps]
       knn.mat <- KNN(clust.dist, k = num.neighbors)
       if (is.null(subset)) {
