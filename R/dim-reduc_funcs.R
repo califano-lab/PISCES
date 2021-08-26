@@ -6,8 +6,12 @@
 #' @return Modified Seurat object w/ UMAP object in misc$umap
 #' @export
 MakeUMAP <- function(dat.object, cbc = FALSE, num.feats = 10) {
-  # extract viper matrix
-  dat.mat <- dat.object@assays[[dat.object@active.assay]]@scale.data
+  # check if seurat object
+  if (class(dat.object)[1] == "Seurat") {
+    dat.mat <- dat.object@assays[[dat.object@active.assay]]@scale.data
+  } else {
+    dat.mat <- dat.object
+  }
   # adjust data if cbc is specified
   if (cbc) {
     cbc.feats <- apply(dat.mat, 2, function(x) { names(sort(x, decreasing = TRUE))[1:num.feats] })
@@ -17,9 +21,13 @@ MakeUMAP <- function(dat.object, cbc = FALSE, num.feats = 10) {
   # make umap
   umap.mat <- uwot::umap(t(dat.mat), metric = 'correlation')
   rownames(umap.mat) <- colnames(dat.mat)
-  # add umap to object
-  dat.object@assays[[dat.object@active.assay]]@misc[['umap']] <- umap.mat
-  return(dat.object)
+  # check if seurat object
+  if (class(dat.object)[1] == "Seurat") {
+    dat.object@assays[[dat.object@active.assay]]@misc[['umap']] <- umap.mat
+    return(dat.object)
+  } else {
+    return(umap.mat)
+  }
 }
 
 #' Gets the number of PCA features to use from a Seurat object based on the given variance theshold.
