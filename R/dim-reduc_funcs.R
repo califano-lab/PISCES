@@ -29,6 +29,29 @@ MakeUMAP <- function(dat.object, cbc = FALSE, num.feats = 10) {
     return(umap.mat)
   }
 }
+#' Builds a UMAP using the uwot package. Optionally can subset to most significant data within each sample.
+#' 
+#' @param dat.object Seurat object w/ PISCES assay and viper matrix in 'misc'.
+#' @param num.dims Number of dimensions to return. Default of 2.
+#' @return Modified Seurat object w/ UMAP object in misc$umap
+#' @export
+MakeMDS <- function(dat.object, num.dims = 2) {
+  # check if seurat object
+  if (class(dat.object)[1] == "Seurat") {
+    dist.mat <- dat.object@assays[[dat.object@active.assay]]@misc[['dist.mat']]
+  } else {
+    dist.mat <- dat.object
+  }
+  # generate mds
+  mds.mat <- cmdscale(dist.mat, k = num.dims)
+  # check if seurat object
+  if (class(dat.object)[1] == "Seurat") {
+    dat.object@assays[[dat.object@active.assay]]@misc[['mds']] <- mds.mat
+    return(dat.object)
+  } else {
+    return(mds.mat)
+  }
+}
 
 #' Gets the number of PCA features to use from a Seurat object based on the given variance theshold.
 #' 

@@ -72,9 +72,8 @@ ColorLevels <- function(num.colors, data.type) {
 #' Generates basic quality control plots from raw gene expression data.
 #'
 #' @param seurat.obj A Seurat object w/ MT% added to metadata.
-#' @param plot.path Optional argument of save path for plot.
 #' @export
-QCPlots <- function(seurat.obj, plot.path) {
+QCPlots <- function(seurat.obj) {
   samp.factor <- as.factor(rep('raw', ncol(seurat.obj)))
   ## sequencing depth plot
   p1.dat <- data.frame('Depth' = seurat.obj$nCount_RNA, 'Sample' = samp.factor)
@@ -91,14 +90,9 @@ QCPlots <- function(seurat.obj, plot.path) {
   p3 <- ggplot2::ggplot(p3.dat, ggplot2::aes(x=Sample, y=mt)) + ggplot2::geom_violin(color = '#619CFF', fill = '#619CFF') +
     ggplot2::ylab('MT%') + ggplot2::xlab('') + ggplot2::theme_bw() + 
     ggplot2::theme(axis.text.x=ggplot2::element_blank())
-  ## arrange and plot
-  if (!missing(plot.path)) {
-    jpeg(plot.path, height = 600, width = 1000)
-    print(ggpubr::ggarrange(plotlist = list(p1, p2, p3), ncol = 3))
-    dev.off()
-  } else {
-    ggpubr::ggarrange(plotlist = list(p1, p2, p3), ncol = 3)
-  }
+  ## make final plot
+  plot.obj <- ggpubr::ggarrange(plotlist = list(p1, p2, p3), ncol = 3)
+  return(plot.obj)
 }
 
 #' Generates a heatmap of the cluster-specific master regulators.
