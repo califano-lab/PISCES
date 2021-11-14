@@ -10,6 +10,15 @@ AddPISCESAssay <- function(seurat.obj) {
   return(seurat.obj)
 }
 
+#' Checks if the PISCES assay is present in a given object.
+#' 
+#' @param data.object Seurat object.
+#' @return Boolean TRUE or FALSE.
+#' @export
+HasPISCESAssay <- function(data.object) {
+  return('PISCES' %in% names(data.object@assays))
+}
+
 #' Performas a CPM normalization on the counts in the given seurat object or matrix.
 #' If a seurat object, stores results in the data field; otherwise, returns cpm matrix.
 #'
@@ -21,8 +30,8 @@ AddPISCESAssay <- function(seurat.obj) {
 CPMTransform <- function(data.object, l2 = FALSE, pseudo = FALSE) {
   # check if seurat object
   if (class(data.object)[1] == "Seurat") {
-    if (!('PISCES' %in% Assays(data.object))) {
-      data.object <- AddPISCESAssay(data.object)
+    if (!HasPISCESAssay(data.object)) {
+      AddPISCESAssay(data.object)
     }
     dat.mat <- as.matrix(data.object@assays$PISCES@counts)
   } else {
@@ -52,8 +61,8 @@ CPMTransform <- function(data.object, l2 = FALSE, pseudo = FALSE) {
 GESTransform <- function(data.object) {
   # check if seurat object
   if (class(data.object)[1] == "Seurat") {
-    if (!('PISCES' %in% Assays(data.object))) {
-      data.object <- AddPISCESAssay(data.object)
+    if (!HasPISCESAssay(data.object)) {
+      AddPISCESAssay(data.object)
     }
     dat.mat <- as.matrix(data.object@assays$PISCES@counts)
   } else {
@@ -81,8 +90,8 @@ GESTransform <- function(data.object) {
 RankGES <- function(data.object) {
   # check if seurat object
   if (class(data.object)[1] == "Seurat") {
-    if (!('PISCES' %in% Assays(data.object))) {
-      data.object <- AddPISCESAssay(data.object)
+    if (!HasPISCESAssay(data.object)) {
+      AddPISCESAssay(data.object)
     }
     dat.mat <- as.matrix(data.object@assays$PISCES@counts)
   } else {

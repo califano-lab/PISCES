@@ -1,28 +1,28 @@
 #' Runs VIPER on a seurat.obj that has the appropriately generated 'PISCES' assay and scaled data.
 #' 
-#' @param seurat.obj Seurat object w/ 'PISCES' assay and scaled data.
+#' @param data.object Seurat object w/ 'PISCES' assay and scaled data.
 #' @param net.list List of networks OR a single network.
 #' @param sct.ges Optional flag to use SCT scale data as GES. Default of False.
 #' @return Seurat.object with added 'viper' matrix in PISCES assay
 #' @export
-PISCESViper <- function(seurat.obj, net.list, sct.ges = FALSE) {
+PISCESViper <- function(data.object, net.list, sct.ges = FALSE) {
   # check for PISCES assay
-  if (!('PISCES' %in% Assays(seurat.obj))) {
+  if (!HasPISCESAssay(data.object)) {
     print('Error: No PISCES assay detected')
-    return(seurat.obj)
+    return(data.object)
   }
   # get GES
   if (sct.ges) {
-    ges.mat <- as.matrix(seurat.obj@assays$SCT@scale.data)
+    ges.mat <- as.matrix(data.object@assays$SCT@scale.data)
   } else {
-    ges.mat <- seurat.obj@assays$PISCES@misc$GES
+    ges.mat <- data.object@assays$PISCES@misc$GES
   }
   # run viper
   vip.mat <- viper::viper(ges.mat, net.list, 
                           method = 'none', eset.filter = FALSE)
   # add to object
-  seurat.obj@assays$PISCES@scale.data <- vip.mat
-  return(seurat.obj)
+  data.object@assays$PISCES@scale.data <- vip.mat
+  return(data.object)
 }
 
 #' Merges two viper matrices, giving priority to one over the other.
