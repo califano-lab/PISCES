@@ -105,7 +105,7 @@ QCPlots <- function(seurat.obj) {
 #' @export
 MRHeatmap <- function(pisces.obj, num.mrs = 10, clust.vect, plot.title = '') {
   # check for PISCES assay
-  if (!('PISCES' %in% Assays(pisces.obj))) {
+  if (!HasPISCESAssay(pisces.obj)) {
     print("Error: No PISCES assay in supplied object...")
     return(NULL)
   }
@@ -118,8 +118,6 @@ MRHeatmap <- function(pisces.obj, num.mrs = 10, clust.vect, plot.title = '') {
   }
   # build mr set
   mr.set <- unique(unlist(lapply(vip.mrs, function(x) {names(x$positive[1:num.mrs])} )))
-  mr.set <- mr.set[-which(is.na(mr.set))]
-  print(length(mr.set))
   # build plot matrix and color breaks
   cell.order <- names(sort(clust.vect))
   plot.mat <- vip.mat[mr.set, cell.order]
@@ -128,6 +126,7 @@ MRHeatmap <- function(pisces.obj, num.mrs = 10, clust.vect, plot.title = '') {
   annot.df <- data.frame('Cluster' = as.factor(clust.vect))
   clust.colors <- ClusterColors(length(unique(clust.vect))); names(clust.colors) <- sort(unique(clust.vect))
   annot.color <- list('Cluster' = clust.colors)
+  print(dim(plot.mat))
   # make plot
   plot.obj <- pheatmap::pheatmap(plot.mat, main = plot.title, 
                                  annotation_col = annot.df, annotation_colors = annot.color,
