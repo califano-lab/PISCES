@@ -22,6 +22,66 @@ PamKRange <- function(dist.mat, kmin = 2, kmax = 5, verbose = TRUE) {
   return(list('clusterings' = clusterings, 'sils' = sils))
 }
 
+#' Runs Louvain clusering on the given object with the specified KNN graph.
+#' 
+#' @param data.obj Seurat object w/ dist.mat object in misc of active assay.
+#' @param num.neighbors Number of neighbors to use in the KNN graph. Default of 5.
+#' @return Vector of cluster assignments.
+#' @export
+LouvainClust <- function(data.obj, num.neighbors = 5) {
+  # get KNN matrix
+  knn.mat <- KNN(data.obj@assays[[data.obj@active.assay]]@misc$dist.mat,
+                 num.neighbors)
+  # generate graph
+  adj.mat <- matrix(0L, nrow = nrow(knn.mat), ncol = nrow(knn.mat))
+  colnames(adj.mat) <- rownames(knn.mat)
+  rownames(adj.mat) <- rownames(knn.mat)
+  for (i in 1:nrow(knn.mat)) {
+    adj.mat[i, knn.mat[i,]] <- 1
+  }
+  graph.obj <- graph_from_adjacency_matrix(adj.mat)
+  graph.obj <- as.undirected(graph.obj)
+  # create clustering
+  l.clust <- unlist(as.list(membership(cluster_louvain(graph.obj))))
+  return(l.clust)
+}
+
+#' Runs Louvain clustering w/ each of the specified number of neighbors used in the KNN graph.
+#' 
+#' @param data.obj Seurat object w/ dist.mat object in misc. of active assay.
+#' @param kmin Minimum number of neighbors to use. Default of 5.
+#' @param kmax Maximum number of neighbors to use. Default of 50.
+#' @param kstep Steps to take between values of k. Default of 5.
+#' @return Updated data.obj w/ clustering.obj and pisces.cluster added to active assay.
+#' @export
+LouvainKRange <- function(data.obj, kmin = 5, kmax = 50, kstep = 5) {
+  # create lists
+  cluster.list <- list()
+  sil.list <- list()
+  # grab distance matrix
+  dist.mat <- data.obj@assays[[data.obj@active.assay]]@misc$dist.mat
+  # setup iteration
+  k <- kmin
+  while (k <= kmax) {
+    print(paste("Clustering with k = ", k, "...", sep = ''))
+    # generate clustering and silhouette score
+    clust.vec <- LouvainClust(data.obj, k)
+    sil.score <- cluster::silhouette(clust.vec, dist.mat)
+    # add to list
+    k.ind <- paste('k', k, sep = '.')
+    cluster.list[[k.ind]] <- clust.vec
+    sil.list[[k.ind]] <- mean(sil.score[,3])
+    # iterate
+    k <- k + kstep
+  }
+  # identify optimal cluster
+  opt.clust <- cluster.list[[which.max(sil.list)]]
+  # add to data.object
+  data.obj@assays[[data.obj@active.assay]]@misc[['pisces.cluster']] <- opt.clust
+  data.obj@assays[[data.obj@active.assay]]@misc[['clustering.obj']] <- list('clusterings' = cluster.list, 'sils' = sil.list)
+  return(data.obj)
+}
+
 #' Louvain clustering over a range of resolution parameters (uses getComMembership from the MUDAN package)
 #'
 #' @param data.object Seurat object w/ scale.data and a distance matrix in misc$dist.mat included.
@@ -44,9 +104,15 @@ LouvainResRange <- function(data.obj, rmin = 10, rmax = 100, rstep = 10, verbose
     set.seed(343)
     lclust <- MUDAN::getComMembership(t(dat.mat), k = res, method = igraph::cluster_walktrap, verbose = FALSE)
     clusterings[[paste('res', res, sep = '')]] <- lclust
+    print(head(lclust))
     # evaluate
-    sil.score <- cluster::silhouette(as.integer(lclust), dist.mat)
-    sils[[paste('res', res, sep = '')]] <- mean(sil.score[,3])
+    if (length(unique(as.integer(lclust)) == 0)) {
+      print("singular clustering")
+      sils[[paste('res', res, sep = '')]] <- NA
+    } else {
+      sil.score <- cluster::silhouette(as.integer(lclust), dist.mat)
+      sils[[paste('res', res, sep = '')]] <- mean(sil.score[,3])
+    }
     # iterate resolution param
     res <- res + rstep
   }
@@ -56,36 +122,6 @@ LouvainResRange <- function(data.obj, rmin = 10, rmax = 100, rstep = 10, verbose
   data.obj@assays[[data.obj@active.assay]]@misc[['pisces.cluster']] <- opt.clust
   data.obj@assays[[data.obj@active.assay]]@misc[['clustering.obj']] <- list('clusterings' = clusterings, 'sils' = sils)
   return(data.obj)
-}
-
-#' Generation of silhouette score for a list of clusters.
-#'
-#' @param clusterings List of clustering objects.
-#' @param dist.mat Distance matrix for the data clustered in clusterings.
-#' @param plotPath If specified, will save a plot of the silhouette scores.
-#' @return List of silhouette scores.
-#' @export
-SilScoreEval <- function(clusterings, dist.mat, plotPath) {
-  ## find silhouette scores for each cluster
-  L <- length(clusterings)
-  sil.scores <- c()
-  k.vals <- c()
-  for (i in 1:L) {
-    # identify k for this clustering
-    k <- length(table(clusterings[[i]]$clustering))
-    k.vals <- c(k.vals, k)
-    # find silhouette score
-    sil <- cluster::silhouette(clusterings[[i]], dist.mat)
-    sil.scores <- c(sil.scores, mean(sil[,3]))
-  }
-  ## plot if requested
-  if (!missing(plotPath)) {
-    plot.dat <- data.frame('k' = k.vals, 'Silhouette.Scores' = sil.scores)
-    ggplot2::ggplot(plot.dat, aes(x=k, y=Silhouette.Scores)) + ggplot2::geom_point() + ggplot2::geom_line() +
-      ggplot2::ggsave(plotPath, height=2, width=3)
-  }
-  ## return scores
-  return(sil.scores)
 }
 
 #' Silhouette score optimized Louvain clustering.
