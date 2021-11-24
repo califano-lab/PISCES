@@ -6,6 +6,9 @@
 \usage{
 ObjectiveValue(j, jPrime, x)
 }
+\arguments{
+\item{j}{}
+}
 \value{
 
 }

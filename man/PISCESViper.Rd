@@ -4,12 +4,14 @@
 \alias{PISCESViper}
 \title{Runs VIPER on a seurat.obj that has the appropriately generated 'PISCES' assay and scaled data.}
 \usage{
-PISCESViper(seurat.obj, net.list)
+PISCESViper(data.object, net.list, sct.ges = FALSE)
 }
 \arguments{
-\item{seurat.obj}{Seurat object w/ 'PISCES' assay and scaled data.}
+\item{data.object}{Seurat object w/ 'PISCES' assay and scaled data.}
 
 \item{net.list}{List of networks OR a single network.}
+
+\item{sct.ges}{Optional flag to use SCT scale data as GES. Default of False.}
 }
 \value{
 Seurat.object with added 'viper' matrix in PISCES assay

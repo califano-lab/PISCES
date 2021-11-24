@@ -9,6 +9,9 @@ MTPercent(dat.mat, mt.genes)
 \arguments{
 \item{dat.mat}{Matrix of raw gene expression data (genes X samples).}
 }
+\value{
+Returns named vector of mitochondrial gene percentage.
+}
 \description{
 Returns vector of mitochondrial percentages for the given samples.
 }
