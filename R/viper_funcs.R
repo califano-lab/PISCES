@@ -17,8 +17,23 @@ PISCESViper <- function(data.object, net.list, sct.ges = FALSE) {
   } else {
     ges.mat <- data.object@assays$PISCES@misc$GES
   }
+  # remove regulons with no targets in the GES
+  final.net.list <- list()
+  for (i in 1:length(net.list)) {
+    net.overlap <- sapply(net.list[[i]], function(x) {length(intersect(names(x$tfmode), rownames(ges.mat)))} )
+    filter.net <- net.list[[i]][which(net.overlap > 0)]
+    if (max(net.overlap) > 25) {
+      final.net.list[[as.character(i)]] <- filter.net
+    }
+  }
+  # abort if no networks left
+  if (length(final.net.list) == 0) {
+    print("No networks with sufficient targets. Aborting...")
+    return(data.obj)
+  }
   # run viper
-  vip.mat <- viper::viper(ges.mat, net.list, 
+  print(dim(ges.mat))
+  vip.mat <- viper::viper(ges.mat, final.net.list, 
                           method = 'none', eset.filter = FALSE)
   # add to object
   data.object@assays$PISCES@scale.data <- vip.mat

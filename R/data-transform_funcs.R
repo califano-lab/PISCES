@@ -24,10 +24,11 @@ HasPISCESAssay <- function(data.object) {
 #'
 #' @param data.object Either a Seurat object or a matrix of raw count data (genes X samples).
 #' @param l2 Optional log2 normalization switch. Default of False.
+#' @param remove.zeros Removes genes with zero expression across all samples. True by default.
 #' @param pseudo Optional pseudo count logical. Default of False.
 #' @return CPM matrix, or appropriately adjusted seurat object.
 #' @export
-CPMTransform <- function(data.object, l2 = FALSE, pseudo = FALSE) {
+CPMTransform <- function(data.object, remove.zeros = TRUE, l2 = FALSE, pseudo = FALSE) {
   # check if seurat object
   if (class(data.object)[1] == "Seurat") {
     if (!HasPISCESAssay(data.object)) {
@@ -39,6 +40,8 @@ CPMTransform <- function(data.object, l2 = FALSE, pseudo = FALSE) {
   }
   # pseudo count if specified
   if (pseudo) { dat.mat <- dat.mat + 1 }
+  # remove genes with zero reads
+  if (remove.zeros) { dat.mat <- dat.mat[which(rowSums(dat.mat) > 0),] }
   # cpm transform
   cpm.mat <- t(t(dat.mat) / (colSums(dat.mat) / 1e6))
   # log2 if specified
@@ -64,7 +67,7 @@ GESTransform <- function(data.object) {
     if (!HasPISCESAssay(data.object)) {
       AddPISCESAssay(data.object)
     }
-    dat.mat <- as.matrix(data.object@assays$PISCES@counts)
+    dat.mat <- as.matrix(data.object@assays$PISCES@data)
   } else {
     dat.mat <- data.object
   }

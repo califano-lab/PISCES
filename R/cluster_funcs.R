@@ -28,10 +28,10 @@ PamKRange <- function(dist.mat, kmin = 2, kmax = 5, verbose = TRUE) {
 #' @param num.neighbors Number of neighbors to use in the KNN graph. Default of 5.
 #' @return Vector of cluster assignments.
 #' @export
-LouvainClust <- function(data.obj, num.neighbors = 5) {
+LouvainClust <- function(dist.mat, num.neighbors = 5) {
+  require(igraph)
   # get KNN matrix
-  knn.mat <- KNN(data.obj@assays[[data.obj@active.assay]]@misc$dist.mat,
-                 num.neighbors)
+  knn.mat <- KNN(dist.mat, num.neighbors)
   # generate graph
   adj.mat <- matrix(0L, nrow = nrow(knn.mat), ncol = nrow(knn.mat))
   colnames(adj.mat) <- rownames(knn.mat)
@@ -39,10 +39,10 @@ LouvainClust <- function(data.obj, num.neighbors = 5) {
   for (i in 1:nrow(knn.mat)) {
     adj.mat[i, knn.mat[i,]] <- 1
   }
-  graph.obj <- graph_from_adjacency_matrix(adj.mat)
+  graph.obj <- igraph::graph_from_adjacency_matrix(adj.mat)
   graph.obj <- as.undirected(graph.obj)
   # create clustering
-  l.clust <- unlist(as.list(membership(cluster_louvain(graph.obj))))
+  l.clust <- unlist(as.list(igraph::membership(cluster_louvain(graph.obj))))
   return(l.clust)
 }
 
@@ -55,11 +55,16 @@ LouvainClust <- function(data.obj, num.neighbors = 5) {
 #' @return Updated data.obj w/ clustering.obj and pisces.cluster added to active assay.
 #' @export
 LouvainKRange <- function(data.obj, kmin = 5, kmax = 50, kstep = 5) {
+  print(class(data.obj)[1])
+  # check if seurat object
+  if (class(data.obj)[1] == "Seurat") {
+    dist.mat <- data.obj@assays[[data.obj@active.assay]]@misc$dist.mat
+  } else {
+    dist.mat <- data.obj
+  }
   # create lists
   cluster.list <- list()
   sil.list <- list()
-  # grab distance matrix
-  dist.mat <- data.obj@assays[[data.obj@active.assay]]@misc$dist.mat
   # setup iteration
   k <- kmin
   while (k <= kmax) {
@@ -77,9 +82,13 @@ LouvainKRange <- function(data.obj, kmin = 5, kmax = 50, kstep = 5) {
   # identify optimal cluster
   opt.clust <- cluster.list[[which.max(sil.list)]]
   # add to data.object
-  data.obj@assays[[data.obj@active.assay]]@misc[['pisces.cluster']] <- opt.clust
-  data.obj@assays[[data.obj@active.assay]]@misc[['clustering.obj']] <- list('clusterings' = cluster.list, 'sils' = sil.list)
-  return(data.obj)
+  if (class(data.obj)[1] == "Seurat") {
+    data.obj@assays[[data.obj@active.assay]]@misc[['pisces.cluster']] <- opt.clust
+    data.obj@assays[[data.obj@active.assay]]@misc[['clustering.obj']] <- list('clusterings' = cluster.list, 'sils' = sil.list)
+    return(data.obj)
+  } else {
+    return(list('pisces.cluster' = opt.clust, 'clustering.obj' = list('clusterings' = cluster.list, 'sils' = sil.list)))
+  }
 }
 
 #' Louvain clustering over a range of resolution parameters (uses getComMembership from the MUDAN package)

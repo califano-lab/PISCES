@@ -34,6 +34,7 @@ MetaCells <- function(counts.mat, dist.mat, clust.vect, num.neighbors = 5, subse
     names(clust.vect) <- colnames(counts.mat)
   }
   clust.labels <- sort(unique(clust.vect))
+  clust.labels <- as.character(clust.labels)
   # metacell matrix for each cluster
   meta.mats <- list()
   for (cl in clust.labels) {
