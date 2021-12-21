@@ -84,6 +84,30 @@ GESTransform <- function(data.object) {
   }
 }
 
+#' Generates a Gene Expression Signature using an ECDF of the reference.
+#' 
+#' @test.mat Matrix of normalized gene expression, i.e. CPM (features X samples)
+#' @ref.mat Optional reference matrix. If not included, an internal signature is performed.
+ecdfGES <- function(test.mat, ref.mat = NULL) {
+  if (is.null(ref.mat)) {
+    ref.mat <- gexp.mat
+  }
+  ref.mat <- ref.mat[which(rowSums(ref.mat) != 0),]
+  # generate ges
+  shared.genes <- intersect(rownames(ref.mat), rownames(test.mat))
+  ges.vecs <- lapply(shared.genes, function(x) {
+    ecdf.func <- ecdf(ref.mat[x,])
+    ecdf.vals <- ecdf.func(test.mat[x,])
+    ges.vals <- sapply(ecdf.vals, function(y) {qnorm(y, lower.tail = TRUE)})
+    return(ges.vals)
+  })
+  ges.mat <- do.call(rbind, ges.vecs)
+  # name and return
+  colnames(ges.mat) <- colnames(test.mat)
+  rownames(ges.mat) <- shared.genes
+  return(ges.mat)
+}
+
 #' Performs a rank transformation on a given matrix, typically as an alternative GES generation technique.
 #' If a seurat object, stores results in misc$GES; otherwise, returns GES matrix.
 #'

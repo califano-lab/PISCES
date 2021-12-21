@@ -2,22 +2,23 @@
 #' 
 #' @param data.object Seurat object w/ 'PISCES' assay and scaled data.
 #' @param net.list List of networks OR a single network.
-#' @param sct.ges Optional flag to use SCT scale data as GES. Default of False.
+#' @param use.assay Name of assay to use. If not specified, grabs the GES object from the PISCES assay.
 #' @return Seurat.object with added 'viper' matrix in PISCES assay
 #' @export
-PISCESViper <- function(data.object, net.list, sct.ges = FALSE) {
+PISCESViper <- function(data.object, net.list, use.assay = NULL) {
   # check for PISCES assay
   if (!HasPISCESAssay(data.object)) {
     print('Error: No PISCES assay detected')
     return(data.object)
   }
   # get GES
-  if (sct.ges) {
-    ges.mat <- as.matrix(data.object@assays$SCT@scale.data)
-  } else {
+  if (is.null(use.assay)) {
     ges.mat <- data.object@assays$PISCES@misc$GES
+  } else {
+    ges.mat <- as.matrix(data.object@assays[[use.assay]]@scale.data)
   }
   # remove regulons with no targets in the GES
+  if (class(net.list) == 'regulon') {net.list <- list(net.list)}
   final.net.list <- list()
   for (i in 1:length(net.list)) {
     net.overlap <- sapply(net.list[[i]], function(x) {length(intersect(names(x$tfmode), rownames(ges.mat)))} )
