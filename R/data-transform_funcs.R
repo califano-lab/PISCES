@@ -88,9 +88,19 @@ GESTransform <- function(data.object) {
 #' 
 #' @test.mat Matrix of normalized gene expression, i.e. CPM (features X samples)
 #' @ref.mat Optional reference matrix. If not included, an internal signature is performed.
-ecdfGES <- function(test.mat, ref.mat = NULL) {
+ecdfGES <- function(data.object, ref.mat = NULL) {
+  # check if seurat object
+  if (class(data.object)[1] == "Seurat") {
+    if (!HasPISCESAssay(data.object)) {
+      AddPISCESAssay(data.object)
+    }
+    test.mat <- as.matrix(data.object@assays$PISCES@data)
+  } else {
+    test.mat <- data.object
+  }
+  # set test as the reference if this is an internal signature
   if (is.null(ref.mat)) {
-    ref.mat <- gexp.mat
+    ref.mat <- test.mat
   }
   ref.mat <- ref.mat[which(rowSums(ref.mat) != 0),]
   # generate ges
@@ -98,14 +108,24 @@ ecdfGES <- function(test.mat, ref.mat = NULL) {
   ges.vecs <- lapply(shared.genes, function(x) {
     ecdf.func <- ecdf(ref.mat[x,])
     ecdf.vals <- ecdf.func(test.mat[x,])
+    # adjust for 1 / 0
+    ecdf.vals[which(ecdf.vals == 1)] <- (max(ecdf.vals[which(ecdf.vals != 1)]) + 1) / 2
+    ecdf.vals[which(ecdf.vals == 0)] <- (min(ecdf.vals[which(ecdf.vals != 0)]) + 0) / 2
+    # qnorm to get ges
     ges.vals <- sapply(ecdf.vals, function(y) {qnorm(y, lower.tail = TRUE)})
     return(ges.vals)
   })
+  # format as matrix
   ges.mat <- do.call(rbind, ges.vecs)
-  # name and return
   colnames(ges.mat) <- colnames(test.mat)
   rownames(ges.mat) <- shared.genes
-  return(ges.mat)
+  # return
+  if (class(data.object)[1] == "Seurat") {
+    data.object@assays$PISCES@misc[['GES']] <- ges.mat 
+    return(data.object)
+  } else {
+    return(ges.mat)
+  }
 }
 
 #' Performs a rank transformation on a given matrix, typically as an alternative GES generation technique.
@@ -145,12 +165,17 @@ RankGES <- function(data.object) {
 #' @param cor.method Method argument for cor function; spearman by default.
 #' @return Rank transformed matrix, or appropriately adjusted seurat object.
 #' @export
-CorDist <- function(data.object, cor.method = 'spearman') {
+CorDist <- function(data.object, pca.feats = NULL, cor.method = 'spearman') {
   # check if seurat object
   if (class(data.object)[1] == "Seurat") {
     dat.mat <- as.matrix(data.object@assays[[data.object@active.assay]]@scale.data)
   } else {
     dat.mat <- data.object
+  }
+  # generate PCA if specified
+  if (!is.null(pca.feats)) {
+    pca.mat <- prcomp(t(dat.mat))
+    dat.mat <- t(pca.mat$x[,1:pca.feats])
   }
   # generate distane matrix
   dist.mat <- as.dist(sqrt(1 - cor(dat.mat, method = cor.method)))

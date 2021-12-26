@@ -29,7 +29,7 @@ PamKRange <- function(dist.mat, kmin = 2, kmax = 5, verbose = TRUE) {
 #' @return Vector of cluster assignments.
 #' @export
 LouvainClust <- function(dist.mat, num.neighbors = 5) {
-  require(igraph)
+  require(igraph, quietly = TRUE)
   # get KNN matrix
   knn.mat <- KNN(dist.mat, num.neighbors)
   # generate graph
@@ -55,7 +55,7 @@ LouvainClust <- function(dist.mat, num.neighbors = 5) {
 #' @return Updated data.obj w/ clustering.obj and pisces.cluster added to active assay.
 #' @export
 LouvainKRange <- function(data.obj, kmin = 5, kmax = 50, kstep = 5) {
-  print(class(data.obj)[1])
+  require(igraph, quietly = TRUE)
   # check if seurat object
   if (class(data.obj)[1] == "Seurat") {
     dist.mat <- data.obj@assays[[data.obj@active.assay]]@misc$dist.mat
@@ -70,7 +70,7 @@ LouvainKRange <- function(data.obj, kmin = 5, kmax = 50, kstep = 5) {
   while (k <= kmax) {
     print(paste("Clustering with k = ", k, "...", sep = ''))
     # generate clustering and silhouette score
-    clust.vec <- LouvainClust(data.obj, k)
+    clust.vec <- LouvainClust(dist.mat, k)
     sil.score <- cluster::silhouette(clust.vec, dist.mat)
     # add to list
     k.ind <- paste('k', k, sep = '.')
@@ -113,7 +113,6 @@ LouvainResRange <- function(data.obj, rmin = 10, rmax = 100, rstep = 10, verbose
     set.seed(343)
     lclust <- MUDAN::getComMembership(t(dat.mat), k = res, method = igraph::cluster_walktrap, verbose = FALSE)
     clusterings[[paste('res', res, sep = '')]] <- lclust
-    print(head(lclust))
     # evaluate
     if (length(unique(as.integer(lclust)) == 0)) {
       print("singular clustering")
