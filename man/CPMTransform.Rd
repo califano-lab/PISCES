@@ -5,10 +5,12 @@
 \title{Performas a CPM normalization on the counts in the given seurat object or matrix.
 If a seurat object, stores results in the data field; otherwise, returns cpm matrix.}
 \usage{
-CPMTransform(data.object, l2 = FALSE, pseudo = FALSE)
+CPMTransform(data.object, remove.zeros = TRUE, l2 = FALSE, pseudo = FALSE)
 }
 \arguments{
 \item{data.object}{Either a Seurat object or a matrix of raw count data (genes X samples).}
+
+\item{remove.zeros}{Removes genes with zero expression across all samples. True by default.}
 
 \item{l2}{Optional log2 normalization switch. Default of False.}
 

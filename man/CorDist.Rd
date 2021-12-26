@@ -5,7 +5,7 @@
 \title{Generates a distance matrix using sqrt(1-cor(x)) as a distance metric.
 If a seurat object, stores results in cor.dist (misc); otherwise, returns distance matrix.}
 \usage{
-CorDist(data.object, cor.method = "spearman")
+CorDist(data.object, pca.feats = NULL, cor.method = "spearman")
 }
 \arguments{
 \item{data.object}{Either a Seurat object or a matrix of data (features X samples).}

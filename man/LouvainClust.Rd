@@ -4,12 +4,12 @@
 \alias{LouvainClust}
 \title{Runs Louvain clusering on the given object with the specified KNN graph.}
 \usage{
-LouvainClust(data.obj, num.neighbors = 5)
+LouvainClust(dist.mat, num.neighbors = 5)
 }
 \arguments{
-\item{data.obj}{Seurat object w/ dist.mat object in misc of active assay.}
-
 \item{num.neighbors}{Number of neighbors to use in the KNN graph. Default of 5.}
+
+\item{data.obj}{Seurat object w/ dist.mat object in misc of active assay.}
 }
 \value{
 Vector of cluster assignments.
