@@ -86,8 +86,10 @@ GESTransform <- function(data.object) {
 
 #' Generates a Gene Expression Signature using an ECDF of the reference.
 #' 
-#' @test.mat Matrix of normalized gene expression, i.e. CPM (features X samples)
-#' @ref.mat Optional reference matrix. If not included, an internal signature is performed.
+#' @param test.mat Matrix of normalized gene expression, i.e. CPM (features X samples)
+#' @param ref.mat Optional reference matrix. If not included, an internal signature is performed.
+#' @return GES matrix, or appropriately adjusted seurat object.
+#' @export 
 ecdfGES <- function(data.object, ref.mat = NULL) {
   # check if seurat object
   if (class(data.object)[1] == "Seurat") {
