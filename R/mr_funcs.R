@@ -17,7 +17,7 @@ MWUMrs <- function(dat.object, clust.vect) {
     clust.vect <- dat.object@assays$PISCES@misc$pisces.cluster
   }
   # identify cluster names
-  clust.names <- unique(clust.vect)
+  clust.names <- sort(unique(clust.vect))
   clust.mrs <- list()
   # cluster specific mrs
   for (cn in clust.names) {
@@ -36,8 +36,9 @@ MWUMrs <- function(dat.object, clust.vect) {
     # sort and return
     mr.lists <- list('positive' = sort(clust.logp[which(median.dif == 1)]),
                      'negative' = sort(clust.logp[which(median.dif == -1)]))
-    clust.mrs[[cn]] <- mr.lists
+    clust.mrs[[as.character(cn)]] <- mr.lists
   }
+  clust.mrs <- clust.mrs[sort(names(clust.mrs))]
   # add to object and return
   if (class(dat.object)[1] == "Seurat") {
     dat.object@assays$PISCES@misc[['mwuMRs']] <- clust.mrs
