@@ -58,7 +58,7 @@ StoufferIntegrate <- function(dat.vect, weight.vect) {
   if (!missing(weight.vect)) {
     s.int <- sum(dat.vect * weight.vect) / sqrt(sum(weight.vect**2))
   } else {
-    s.int <- sum(dat.vect) / length(dat.vect)
+    s.int <- sum(dat.vect) / sqrt(length(dat.vect))
   }
   return(s.int)
 }
