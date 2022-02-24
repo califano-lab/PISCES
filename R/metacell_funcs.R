@@ -26,6 +26,7 @@ KNN <- function(dist.mat, k = 5){
 #' @return A list of meta cell matrices for all clusters with enough samples.
 #' @export
 MetaCells <- function(counts.mat, dist.mat, clust.vect, num.neighbors = 5, subset = 250, min.samps = 500) {
+  n <- subset
   counts.mat <- as.matrix(counts.mat)
   dist.mat <- as.matrix(dist.mat)
   # dummy clustering vector if not specified
@@ -47,12 +48,12 @@ MetaCells <- function(counts.mat, dist.mat, clust.vect, num.neighbors = 5, subse
       knn.mat <- KNN(clust.dist, k = num.neighbors)
       if (is.null(subset)) {
         sub.samps <- clust.samps
-        subset <- length(sub.samps)
+        n <- length(sub.samps)
       } else {
         sub.samps <- sample(clust.samps, subset)
       }
       # impute matrix
-      imp.mat <- matrix(0L, nrow = nrow(clust.counts), ncol = subset)
+      imp.mat <- matrix(0L, nrow = nrow(clust.counts), ncol = n)
       rownames(imp.mat) <- rownames(counts.mat); colnames(imp.mat) <- sub.samps
       for (ss in sub.samps) {
         neighbor.vect <- c(ss, rownames(knn.mat)[knn.mat[ss,]])
