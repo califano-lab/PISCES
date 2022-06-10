@@ -1,3 +1,49 @@
+#' Identifies cluster specific master regulators by generating cluter-specific signatures and running NaRnEA.
+#' 
+#' @param norm.counts Matrix of normalized counts (features X samples).
+#' @param clust.vec Clustering vector.
+#' @param net.list List of ARACNe3 networks.
+#' @param num.mrs Number of master regulators to return for each cluster. Default of 10.
+#' @return A three member list w/ `positive` and `negative` MRs as well as the full NaRnEA results `mr.narnea`.
+#' @export
+cluster_signature_mrs <- function(norm.counts, clust.vec, net.list, num.mrs = 10) {
+  clust.ges <- list()
+  clust.names <- as.character(sort(unique(clust.vec)))
+  for (cn in clust.names) {
+    # set sample vectors
+    test.samps <- which(clust.vec == cn)
+    ref.samps <- which(clust.vec != cn)
+    # run wilcox test
+    ges.vec <- apply(norm.counts, 1, function(x) {
+      w.test <- wilcox.test(x[test.samps], x[ref.samps], alternative = "two.sided")
+      rbs.cor <- 2 * w.test$statistic / (length(test.samps) * length(ref.samps)) - 1
+      return(qnorm(1 - w.test$p.val) * sign(rbs.cor))
+    })
+    # catch nans / Inf values
+    ges.vec[which(is.nan(ges.vec))] <- 0
+    inf.max <- max(abs(ges.vec[which(!is.infinite(ges.vec))]))
+    ges.vec[which(ges.vec == Inf)] <- inf.max + 1
+    ges.vec[which(ges.vec == -Inf)] <- (-1) * inf.max - 1
+    # add to list
+    clust.ges[[cn]] <- ges.vec
+  }
+  clust.ges <- Reduce(cbind, clust.ges)
+  colnames(clust.ges) <- clust.names
+  # run NaRnEA
+  cluster.narnea <- meta_narnea(clust.ges, net.list)
+  # pull out positive MRs
+  pos.mrs <- apply(cluster.narnea$PES, 2, function(x) {
+    names(sort(x, decreasing = TRUE)[1:num.mrs])
+  })
+  neg.mrs <- apply(cluster.narnea$PES, 2, function(x) {
+    names(sort(x, decreasing = FALSE)[1:num.mrs])
+  })
+  # return mr object
+  mr.list <- list('positive' = pos.mrs, 'negative' = neg.mrs, 'mr.narnea' = cluster.narnea)
+  return(mr.list)
+}
+
+
 #' Identifies cluster specific master regulators using the Mann-Whitney U-test.
 #' Approximates p-vals using a normal distribution for n > 30.
 #' 
@@ -48,76 +94,3 @@ MWUMrs <- function(dat.object, clust.vect) {
   }
 }
 
-#' Stouffer integrates the given vector of data.
-#' 
-#' @param dat.vect Vector of data to be integrated
-#' @param weight.vect Vector of weights, if specified.
-#' @return Stouffer integrated value for the given data.
-#' @export
-StoufferIntegrate <- function(dat.vect, weight.vect) {
-  if (!missing(weight.vect)) {
-    s.int <- sum(dat.vect * weight.vect) / sqrt(sum(weight.vect**2))
-  } else {
-    s.int <- sum(dat.vect) / sqrt(length(dat.vect))
-  }
-  return(s.int)
-}
-
-#' Writes a given master regulator object to tsvs for each group.
-#' 
-#' @param mr.obj List of master regulators; list of lists, w/ positive and negative lists of MRs for each group
-#' @param file.dir Directory to write file.
-#' @param file.name Name to be used for each table.
-#' @param num.mrs Number of MRs to write. Default of 50.
-#' @param top Optional argument to write top (activated) MRs. TRUE by default.
-#' @param bottom Optional argument to write bottom (deactivated) MRs. FALSE by default.
-#' @export
-MRTableWrite <- function(mr.obj, file.dir, file.name, num.mrs = 50, top = TRUE, bottom = FALSE) {
-  file.pref <- paste(file.dir, file.name, sep = '/')
-  mr.obj <- mr.obj[sort(names(mr.obj))]
-  # activated mrs
-  if (top) {
-    active.df <- as.data.frame(lapply(mr.obj, function(x) {names(x$'positive'[1:num.mrs])} ))
-    colnames(active.df) <- names(mr.obj)
-    write.table(active.df, file = paste(file.pref, '_pos-mrs.tsv'), sep = '\t',
-                row.names = FALSE, col.names = TRUE, quote = FALSE)
-  }
-  # deactivated mrs
-  if (bottom) {
-    deac.df <- as.data.frame(lapply(mr.obj, function(x) {names(x$'negative'[1:num.mrs])} ))
-    colnames(deac.df) <- names(mr.obj)
-    write.table(deac.df, file = paste(file.pref, '_pos-mrs.tsv'), sep = '\t',
-                row.names = FALSE, col.names = TRUE, quote = FALSE)
-  }
-}
-
-#' Unwraps a nested MR list: previous functions return cluster specific master regulators as a list of lists. This funciton will unwrap that object into one, unique list.
-#'
-#' @param MRs List of lists, with MR names as sub-list names and MR activity as sub-list entries.
-#' @param top If specified, will subset the top X regulators from each set.
-#' @return Returns a de-duplicated list of MRs.
-#' @export
-MR_UnWrap <- function(MRs, top) {
-  if (missing(top)) {
-    return( unique(unlist(lapply(MRs, names), use.names = FALSE)) )
-  } else {
-    mr.unwrap <- lapply(MRs, function(x) {
-      names(sort(x, decreasing = TRUE))[ 1:min(top, length(x)) ]
-    })
-    return( unique(unlist(mr.unwrap, use.names = FALSE)) )
-  }
-}
-
-#' Identifies MRs on a cell-by-cell basis and returns a merged, unique list of all such MRs.
-#'
-#' @param dat.mat Matrix of protein activity (proteins X samples).
-#' @param numMRs Default number of MRs to identify in each cell. Default of 25.
-#' @return Returns a list of master regulators, the unique, merged set from all cells.
-#' @export
-CBCMRs <- function(dat.mat, numMRs = 25) {
-  # identify MRs
-  cbc.mrs <- apply(dat.mat, 2, function(x) { names(sort(x, decreasing = TRUE))[1:numMRs] })
-  cbc.mrs <- unique(unlist(as.list(cbc.mrs)))
-  # return
-  return(cbc.mrs)
-}

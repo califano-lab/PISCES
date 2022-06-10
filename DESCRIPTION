@@ -6,20 +6,25 @@ Authors@R:
            family = "Vlahos",
            role = c("aut", "cre"),
            email = "lv2395@cumc.columbia.edu",
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: What the package does (one paragraph).
+           comment = c(ORCID = "0000-0002-4083-6924"))
+Description: PISCES is the Califano lab pipeline for single-cell RNAseq analysis. It leverages the ARACNe-3 and NaRnEA algorithms to infer regulatory networks and protein activity, with clustering, plotting, and master regulator identification functionality. PISCES can work off of either a Seurat object or in a more independent manner.
 License: What license it uses
 Encoding: UTF-8
 LazyData: true
 Imports:
-  Matrix,
+  abind,
+  biomaRt,
+  circlize,
+  ComplexHeatmap,
   cluster,
   ggplot2,
   ggpubr,
-  pheatmap,
+  ggrepel,
+  grDevices,
+  Matrix,
   RColorBrewer,
-  biomaRt,
-  viper,
+  RSpectra,
+  Seurat,
   uwot
 RoxygenNote: 7.1.1
 Suggests: 
@@ -27,4 +32,4 @@ Suggests:
     rmarkdown
 VignetteBuilder: knitr
 Depends: 
-    R (>= 2.10)
+    R (>= 3.0)
