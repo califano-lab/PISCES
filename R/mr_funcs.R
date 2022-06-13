@@ -9,7 +9,9 @@
 cluster_signature_mrs <- function(norm.counts, clust.vec, net.list, num.mrs = 10) {
   clust.ges <- list()
   clust.names <- as.character(sort(unique(clust.vec)))
+  cat('Generating cluster-specific GES...\n')
   for (cn in clust.names) {
+    print(cn)
     # set sample vectors
     test.samps <- which(clust.vec == cn)
     ref.samps <- which(clust.vec != cn)
@@ -30,6 +32,7 @@ cluster_signature_mrs <- function(norm.counts, clust.vec, net.list, num.mrs = 10
   clust.ges <- Reduce(cbind, clust.ges)
   colnames(clust.ges) <- clust.names
   # run NaRnEA
+  cat('Running NaRnEA...\n')
   cluster.narnea <- meta_narnea(clust.ges, net.list)
   # pull out positive MRs
   pos.mrs <- apply(cluster.narnea$PES, 2, function(x) {

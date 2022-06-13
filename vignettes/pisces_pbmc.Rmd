@@ -1,0 +1,100 @@
+---
+title: "pisces_pbmc"
+output: rmarkdown::html_vignette
+author: Lukas J. Vlahos
+date: June 10 2022
+vignette: >
+  %\VignetteIndexEntry{pisces_pbmc}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+library(knitr)
+opts_chunk$set(collapse = TRUE, comment = "#>", tidy = TRUE, tidy.opts=list(width.cutoff=70))
+```
+
+### Description
+
+#### PISCES - Protein Activity Inference in Single-Cells - is a pipeline designed to apply the master regulator paradigm to single-cell datasets. This vignette demonstrates some of the basic functionality of the pipeline using a PBMC dataset with matching CITE-seq antibodies as validation. In this vignette, we'll use the more flexible, less guided functions within PISCES, all of which are lower case. If you're new to bioinformatics and are more comfortable with a structued approach utilizing Seurat objects, please see the [TO DO] vignette. 
+
+### Citing 'PISCES'
+
+#### If you use `PISCES` in your research, please cite our preprint on bioRxiv [TO DO].
+
+### Installation
+
+#### All the packages needed for this vignette can be foudn on CRAN, BioConductor, or Github. Run the code below to install all dependencies and the PISCES pipeline:
+
+```{r include = TRUE, echo = TRUE, eval = FALSE}
+# install cran packages
+install.packages("abind", "BiocManager", "circlize", "cluster", "devtools", 
+                 "ggplot2", "ggpubr", "ggrepel", "grDevices", "Matrix", 
+                 "RColorBrewer", "RSpectra", "Seurat", "uwot")
+# install bioconductor packages
+BiocManager::install("biomaRt")
+BiocManager::install("ComplexHeatmap")
+# install PISCES
+devtools::install_github("califano-lab/PISCES")
+```
+
+### Setup
+
+#### To start your analysis, set a seed (to ensure reproducability) and load in the datasets from the PISCES package:
+
+```{r include = TRUE, echo = TRUE, eval = FALSE}
+```
+
+### Quality Control
+
+#### The first step is to perform quality control, determining theresholds based on sample depth, detected genes, and mitochondrial read percentage. We also filter out lowly-expressed genes in order to speed computation, though this filtration can be removed. While the thresholds have already been determined for this dataset, it's up to each researcher to determine the cutoffs that make the most sense for their individual data:
+
+```{r include = TRUE, echo = TRUE, eval = FALSE}
+```
+
+### Gene Expression Normalization and Clustering
+
+#### PISCES recommends using a proportional fitting-based normalization approach; samples are first depth normalized before genes are log transformed to variance stabilize. Finally, the samples are once again depth normalized. See the PISCES manuscript for why this particularly normalization methodology is recommened:
+
+```{r include = TRUE, echo = TRUE, eval = FALSE}
+```
+
+#### Next, we generate a PCA and a distance matrix based on correlation (`sqrt(1 - spearman)`). This distance is then used to perform clustering with the Louvain algorithm:
+
+```{r include = TRUE, echo = TRUE, eval = FALSE}
+```
+
+#### Note that PISCES does not aim to establish new paradigms for the analysis of gene expression data. Rather, we aim to provide the best methodology for performing protein activity inference in single-cells. As such, alternative methods of QC, normalization, clustering, and other expression-based analyses can all be used in lieu of the previous steps. Seurat, for instance, provides a robust pipeline for population detection that can then be fed into the subsequent steps of PISCES.
+
+### Meta-Cell Generation and Network Inference
+
+#### With single-cell populations identified, we now generate lineage-specific networks using ARACNe3. For low-depth samples (typically those with fewer than 5,000 UMIs / cell), we recommend the inference of meta-cells within each cluster:
+
+```{r include = TRUE, echo = TRUE, eval = FALSE}
+```
+
+#### These metacell matrices can then be used as input to ARACNe3, a Java-based tool with a command line interface. Scripts for generating networks on an HPC are included in the `data` directory of PISCES. Please consult the `README.txt` therein for guidelines on the appropriate parameters to use for network generation. For the purposes of this vignette, we have pre-generated cluster-specific networks, which can be loaded in directly:
+
+```{r include = TRUE, echo = TRUE, eval = FALSE}
+```
+
+### Protein Activity Inference with Meta-NaRnEA
+
+#### PISCES leverages a vectorized version of the NaRnEA algorithm [citation] to perform protein activity inference,integrating the results across multiple networks. Note that this step may be somewhat slow depending on the size of your data, and that for particularly large datasets an unweighted approach may be necessary (see arguments of `meta_narnea`):
+
+```{r include = TRUE, echo = TRUE, eval = FALSE}
+```
+
+#### Here, we generate an internal gene expression signature (GES) using a simple internal scaling. For other analyses with clearly defined test and reference populations, alternatively defined GES's can be analyzed in the same manner.
+
+### Clustering and Master Regulator Analysis
+
+#### We now perform a similar clustering analysis as before, this time utilizing the protein activity data. Note that NaRnEA produces two metrics; an effect size (PES) and a measure of statistical significance (NES). All downstream analysis should be performed using the PES, with the NES used only as a threshold of statistical significance during Master Regulator analyses:
+
+```{r include = TRUE, echo = TRUE, eval = FALSE}
+```
+
+#### Finally, we identify candidate master regulators of each detected population and visualize using both volcano plots and a heatmap. This can be done in two ways, either by integration of the cell-specific NaRnEA results within each cluster or by generating a cluster-specific GES and re-generating cluster-specific NaRnEA results. The latter approach is more robust and is generally recommended:
+
+
+

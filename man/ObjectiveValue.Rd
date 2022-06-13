@@ -9,9 +9,6 @@ ObjectiveValue(j, jPrime, x)
 \arguments{
 \item{j}{}
 }
-\value{
-
-}
 \description{
 Calculates the value of the objective function for optimizing cluster assignments.
 }

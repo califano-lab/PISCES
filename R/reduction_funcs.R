@@ -22,11 +22,17 @@ fast_pca <- function(dat.mat, num.pcs = 10) {
 #' Generates a UMAP using the uwot package.
 #' 
 #' @param dat.mat Matrix of data (features X samples).
+#' @param dense.map Flag to use dense UMAP. Default of TRUE.
 #' @return Two column matrix with UMAP representation of samples.
 #' @export
-make_umap <- function(dat.mat) {
+make_umap <- function(dat.mat, dense = TRUE) {
   require(uwot)
-  umap.mat <- uwot::umap(t(dat.mat), metric = 'correlation')
+  require(densvis)
+  if (dense) {
+    umap.mat <- densmap(t(dat.mat))
+  } else {
+    umap.mat <- umap(t(dat.mat), metric = 'correlation')
+  }
   rownames(umap.mat) <- colnames(dat.mat)
   return(umap.mat)
 }

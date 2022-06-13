@@ -156,3 +156,47 @@ ecdf_norm <- function(test.vec, ref.vec) {
   norm.vec <- sapply(ecdf.vals, function(y) {qnorm(y, lower.tail = TRUE)})
   return(norm.vec)
 }
+
+#' Generates a single-sample, internal GES.
+#' 
+#' @param filt.counts Matrix (features X samples) of filtered count data.
+#' @param norm.method Normalization method. One of `c('cpm', 'pflpf')`, uses `pflpf` by default.
+#' @param est.method Estimation method. One of `c('mle', 'map')`, with `map` by default.
+#' @param map.iter Number of iterations to use if using MAP estimation. Default of 10.
+#' @return GES Matrix (features X samples).
+#' @export
+internal_ges <- function(filt.counts, norm.method = c('cpm', 'pflpf'), est.method = c('map', 'ps'), map.iter = 10) {
+  require(DirichletReg)
+  
+  # check arguments
+  match.arg(norm.method)
+  if (missing(norm.method)) { norm.method <- 'pflpf' }
+  match.arg(est.method)
+  if (missing(est.method)) { est.method <- 'map' }
+  
+  # add Jeffreys Prior
+  filt.counts <- filt.counts + 0.5
+  # mle ges
+  if (est.method == 'map') {
+    cat("Generating GES using an MAP...\n")
+    mle.mat <- switch(norm.method, 
+                      "pflpf" = pflpf_norm(filt.counts),
+                      "cpm" = cpm_norm(filt.counts))
+    ges.mat <- ecdf_ges(mle.mat)
+  } else {
+    cat("Generating a GES by sampling from the posterior. WARNING: May be slow for many samples.\n")
+    map.mats <- list()
+    # draw from dirichlet, then generate GES
+    for (i in 1:map.iter) {
+      if (i %% 10 == 0) { cat(paste("Map iteration ", i, "...\n", sep = ''))}
+      dir.mat <- apply(filt.counts, 2, function(x) { rdirichlet(1, x)})
+      rownames(dir.mat) <- rownames(filt.counts)
+      dir.ges <- ecdf_ges(dir.mat)
+      map.mats[[i]] <- dir.ges
+    }
+    # stouffer integrate
+    ges.mat <- Reduce('+', map.mats) / sqrt(map.iter)
+  }
+  
+  return(ges.mat)
+}

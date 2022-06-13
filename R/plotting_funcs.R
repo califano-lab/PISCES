@@ -79,7 +79,7 @@ cluster_mr_volcano <- function(mr.obj, num.mrs = 10) {
     scale_color_manual(values = c('blue', 'darkgrey', 'red')) + 
     geom_label_repel(aes(label = Label, color = Significance), box.padding = 0.5,
                      max.overlaps = Inf, show.legend = FALSE) +
-    facet_wrap(vars(Cluster), nrow = 2) + 
+    facet_wrap(vars(Cluster), ncol = 3) + 
     xlim(-1, 1) +
     labs(x = 'PES', y = '|NES|', title = 'Cluster Master Regulators') +
     geom_hline(yintercept = 0) + geom_vline(xintercept = 0) +
