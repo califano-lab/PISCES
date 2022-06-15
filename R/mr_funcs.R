@@ -46,6 +46,60 @@ cluster_signature_mrs <- function(norm.counts, clust.vec, net.list, num.mrs = 10
   return(mr.list)
 }
 
+#' Identified MRs based on a pairwise comparison of clusters.
+#' 
+#' @param norm.counts Matrix of normalized counts (features X samples).
+#' @param clust.vec Clustering vector.
+#' @param net.list List of ARACNe3 networks.
+#' @param num.mrs Number of master regulators to return for each cluster. Default of 10.
+#' @return A three member list w/ `positive` and `negative` MRs as well as the full NaRnEA results `mr.narnea`.
+#' @export
+pairwise_cluster_mrs <- function(norm.counts, clust.vec, net.list, num.mrs = 10) {
+  # generate pairwise GES
+  ges.vecs <- list()
+  clust.names <- as.character(sort(unique(clust.vec)))
+  num.clust <- length(clust.names)
+  cat("Generating pairwise cluster GES...\n")
+  for (i in 1:(num.clust - 1)) {
+    for (j in (i+1):num.clust) {
+      i.clust <- clust.names[i]
+      j.clust <- clust.names[j]
+      # get samples
+      i.samps <- which(clust.vec == i.clust)
+      j.samps <- which(clust.vec == j.clust)
+      # generate GES
+      ges.vec <- apply(norm.counts, 1, function(x) {
+        w.test <- wilcox.test(x[i.samps], x[j.samps], alternative = "two.sided")
+        rbs.cor <- 2 * w.test$statistic / (length(i.samps) * length(j.samps)) - 1
+        return(qnorm(1 - w.test$p.val) * sign(rbs.cor))
+      })
+      # catch nans / Inf values
+      ges.vec[which(is.nan(ges.vec))] <- 0
+      inf.max <- max(abs(ges.vec[which(!is.infinite(ges.vec))]))
+      ges.vec[which(ges.vec == Inf)] <- inf.max + 1
+      ges.vec[which(ges.vec == -Inf)] <- (-1) * inf.max - 1
+      # add to list
+      ges.vecs[[paste(i.clust, 'v', j.clust, sep = '.')]] <- ges.vec
+    }
+  }
+  clust.ges <- Reduce(cbind, ges.vecs)
+  colnames(clust.ges) <- names(ges.vecs)
+  # run NaRnEA
+  cat('Running NaRnEA...\n')
+  pairwise.narnea <- meta_narnea(clust.ges, net.list)
+  # pull out positive MRs
+  pos.mrs <- apply(pairwise.narnea$PES, 2, function(x) {
+    names(sort(x, decreasing = TRUE)[1:num.mrs])
+  })
+  colnames(pos.mrs) <- names(ges.vecs)
+  neg.mrs <- apply(pairwise.narnea$PES, 2, function(x) {
+    names(sort(x, decreasing = FALSE)[1:num.mrs])
+  })
+  colnames(neg.mrs) <- names(ges.vecs)
+  # return mr object
+  mr.list <- list('positive' = pos.mrs, 'negative' = neg.mrs, 'mr.narnea' = pairwise.narnea)
+  return(mr.list)  
+}
 
 #' Identifies cluster specific master regulators using the Mann-Whitney U-test.
 #' Approximates p-vals using a normal distribution for n > 30.

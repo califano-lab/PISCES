@@ -1,3 +1,35 @@
+#' Generates a distance matrix from NaRnEA results sample-sample PES enrichment.
+#' 
+#' @param pes.mat Matrix of PES values (proteins X samples).
+#' @param num.prots Number of proteins to use in each regulon. Default/minimum of 30. 
+#' WARNING: Using more proteins will increase runtime.
+#' @return A distance matrix (samples X samples).
+#' @export
+narnea_dist <- function(pes.mat, num.prots = 30) {
+  if (num.prots < 30) {
+    cat("WARNING: Cannot use fewer than 30 proteins. Setting `min.prots=30`.\n")
+    num.prots <- 30
+  }
+  
+  # construct sample regulons
+  cat('Generating sample pseudo-regulons...')
+  sample.regs <- apply(pes.mat, 2, function(x) {
+    top.prots <- names(sort(abs(x), decreasing = TRUE))[1:num.prots]
+    aw.vec <- rev(1:num.prots / (num.prots + 1)); names(aw.vec) <- top.prots
+    am.vec <- sign(x[top.prots]); names(am.vec) <- top.prots
+    return(list('aw' = aw.vec, 'am' = am.vec))
+  })
+  # run NaRnEA
+  cat('Running NaRnEA...')
+  ss.narnea <- matrix_narnea(pes.mat, sample.regs)
+  # generate distance
+  cat('Computing distance...')
+  sym.pes <- (ss.narnea$PES + t(ss.narnea$PES)) / 2
+  diag(sym.pes) <- 1 # corrects for floating point precision issues when subtracting
+  pes.dist <- sqrt(1 - sym.pes)
+  return(pes.dist)
+}
+
 #' Runs MetaNaRnEA using the given ges matrix and network list. 
 #' 
 #' @param ges.mat GES matrix (features X samples).
@@ -152,9 +184,10 @@ weighted_integration <- function(combine.list, return.weights = TRUE) {
 #' @param seed.val Value of seed to ensure reproducibility. Default of 343.
 #' @param min.targets Minimum number of targets needed between a regulon and a GES. Default of 30.
 #' @return List of matrices; 'nes' and 'pes'.
+#' @export
 matrix_narnea <- function(ges.mat, regulon.list, seed.val = 343, min.targets = 30) {
   set.seed(seed.val)
-  cat("Preparing data...\n")
+  cat("Data prep...")
   
   ## remove edges not present in the NES; correct am values (nothing equal to 1, -1, or 0)
   regulon.list <- lapply(regulon.list, function(x) {
@@ -172,7 +205,7 @@ matrix_narnea <- function(ges.mat, regulon.list, seed.val = 343, min.targets = 3
     return(reg.list)
   })
   ## remove regulons with too few targets
-  regulon.list <- regulon.list[which(sapply(regulon.list, function(x) {length(x$aw)}) > min.targets)]
+  regulon.list <- regulon.list[which(sapply(regulon.list, function(x) {length(x$aw)}) >= min.targets)]
   if (length(regulon.list) == 0) {print('No regulons of adequate size'); return(NULL)}
   
   ## correct signature for zeros
@@ -215,15 +248,15 @@ matrix_narnea <- function(ges.mat, regulon.list, seed.val = 343, min.targets = 3
   AW.AM.abs.prod <- AW.mat * AM.abs.mat
   
   ## calculate NES
-  cat("Estimating Directed Enrichment Score...\n")
+  cat("Calculating DES...")
   D.list <- directed_nes(R, S, AW.AM.prod, E.rs, E.r2, n)
-  cat("Estimating Undirected Enrichment Score...\n")
+  cat("Calculating UES...")
   U.list <- undirected_nes(R, S, AW.AM.abs.prod, E.r, E.r2, n)
   COV.nes <- nes_covariance(R, S, AW.AM.prod, AW.AM.abs.prod, E.r, E.rs, D.list$var, U.list$var, g)
-  cat("Estimating Normalized Enrichment Score...\n")
+  cat("Calculating NES...")
   NES.mat <- combine_nes(D.list$nes, U.list$nes, COV.nes)
   
-  cat("Estimating Proportional Enrichment Score...\n")
+  cat("Calculating PES...")
   ## calculate max D and U for each gene
   max.du <- lapply(names(regulon.list), function(x) {
     gene.order <- names(sort(regulon.list[[x]]$aw, decreasing = TRUE))
@@ -252,6 +285,7 @@ matrix_narnea <- function(ges.mat, regulon.list, seed.val = 343, min.targets = 3
   PES.comb.nes <- PES.pos.NES * pos.NES + PES.neg.NES * (!pos.NES)
   PES.mat <- NES.mat / abs(PES.comb.nes)
   
+  cat("Done\n")
   return(list('NES' = NES.mat, 'PES' = PES.mat))
 }
 
@@ -265,6 +299,7 @@ matrix_narnea <- function(ges.mat, regulon.list, seed.val = 343, min.targets = 3
 #' @param n Number of samples (scalar value).
 #' @return List of matrices, each (regulons x samples):
 #' Enrichment score matrix 'es'; expected value 'exp'; variance 'var'; NES matrix 'NES'
+#' @export
 directed_nes <- function(R, S, AW.AM.prod, E.rs, E.r2, n) {
   D <- t(AW.AM.prod) %*% (R * S)
   ## calculate expected value
@@ -290,6 +325,7 @@ directed_nes <- function(R, S, AW.AM.prod, E.rs, E.r2, n) {
 #' @param n Number of samples (scalar value).
 #' @return List of matrices, each (regulons x samples):
 #' Enrichment score matrix 'es'; expected value 'exp'; variance 'var'; NES matrix 'NES'
+#' @export
 undirected_nes <- function(R, S, AW.AM.abs.prod, E.r, E.r2, n) {
   U <- t(AW.AM.abs.prod) %*% R
   ## calculate expected value
@@ -317,6 +353,7 @@ undirected_nes <- function(R, S, AW.AM.abs.prod, E.r, E.r2, n) {
 #' @param U.v Variance of Undirected Enrichment Score (regulons x samples).
 #' @param g Number of genes in the gene expression signature matrix (scalar value).
 #' @return Matrix of covariance values (regulons x samples).
+#' @export
 nes_covariance <- function(R, S, AW.AM.prod, AW.AM.abs.prod, E.r, E.rs, D.v, U.v, g) {
   cov.prod.mat <- as.matrix(colSums(AW.AM.prod * AW.AM.abs.prod))
   ## first component
@@ -337,6 +374,7 @@ nes_covariance <- function(R, S, AW.AM.prod, AW.AM.abs.prod, E.r, E.rs, D.v, U.v
 #' @param U.nes NES scores for the undirected enrichment (regulons x samples).
 #' @param COV.nes Covariance of the undirected and directed enrichment NES (regulons x samples).
 #' @return Matrix of integrated NES scores (regulons x samples).
+#' @export
 combine_nes <- function(D.nes, U.nes, COV.nes) {
   NES.pos <- (D.nes + U.nes) / sqrt(2 + 2*COV.nes)
   NES.neg <- (D.nes - U.nes) / sqrt(2 - 2*COV.nes)
