@@ -43,6 +43,8 @@ devtools::install_github("califano-lab/PISCES")
 #### To start your analysis, set a seed (to ensure reproducability) and load in the datasets from the PISCES package:
 
 ```{r include = TRUE, echo = TRUE, eval = FALSE}
+set.seed(343)
+# TO DO - add datasets
 ```
 
 ### Quality Control
@@ -50,6 +52,10 @@ devtools::install_github("califano-lab/PISCES")
 #### The first step is to perform quality control, determining theresholds based on sample depth, detected genes, and mitochondrial read percentage. We also filter out lowly-expressed genes in order to speed computation, though this filtration can be removed. While the thresholds have already been determined for this dataset, it's up to each researcher to determine the cutoffs that make the most sense for their individual data:
 
 ```{r include = TRUE, echo = TRUE, eval = FALSE}
+qc_plot(pbmc.raw, species = 'hum', genes = 'symb')
+ggsave(file = 'd496-blood/d496-blood_qc.jpg', dpi = 500, height = 6, width = 6)
+filt.counts <- qc_filt(raw.counts, max.depth = 25000, max.mt = 0.25)
+norm.counts <- pflpf_norm(filt.counts)
 ```
 
 ### Gene Expression Normalization and Clustering
@@ -57,6 +63,10 @@ devtools::install_github("califano-lab/PISCES")
 #### PISCES recommends using a proportional fitting-based normalization approach; samples are first depth normalized before genes are log transformed to variance stabilize. Finally, the samples are once again depth normalized. See the PISCES manuscript for why this particularly normalization methodology is recommened:
 
 ```{r include = TRUE, echo = TRUE, eval = FALSE}
+norm.counts <- pflpf_norm(filt.counts)
+gexp.pca <- fast_pca(norm.counts, num.pcs = 100)
+gexp.dist <- cor_dist(t(gexp.pca$x))
+gexp.clust <- louvain_k(gexp.dist)
 ```
 
 #### Next, we generate a PCA and a distance matrix based on correlation (`sqrt(1 - spearman)`). This distance is then used to perform clustering with the Louvain algorithm:
@@ -71,11 +81,16 @@ devtools::install_github("califano-lab/PISCES")
 #### With single-cell populations identified, we now generate lineage-specific networks using ARACNe3. For low-depth samples (typically those with fewer than 5,000 UMIs / cell), we recommend the inference of meta-cells within each cluster:
 
 ```{r include = TRUE, echo = TRUE, eval = FALSE}
+mcell.mats <- make_metacells(norm.counts, gexp.dist, gexp.clust$opt.clust)
+for (cn in names(mcell.mats)) {
+  saveRDS(mcell.mats[[cn]], file = paste('cluster-', cn, '_mcell.rds', sep = ''))
+}
 ```
 
 #### These metacell matrices can then be used as input to ARACNe3, a Java-based tool with a command line interface. Scripts for generating networks on an HPC are included in the `data` directory of PISCES. Please consult the `README.txt` therein for guidelines on the appropriate parameters to use for network generation. For the purposes of this vignette, we have pre-generated cluster-specific networks, which can be loaded in directly:
 
 ```{r include = TRUE, echo = TRUE, eval = FALSE}
+# TO DO: add networks
 ```
 
 ### Protein Activity Inference with Meta-NaRnEA
@@ -83,6 +98,8 @@ devtools::install_github("califano-lab/PISCES")
 #### PISCES leverages a vectorized version of the NaRnEA algorithm [citation] to perform protein activity inference,integrating the results across multiple networks. Note that this step may be somewhat slow depending on the size of your data, and that for particularly large datasets an unweighted approach may be necessary (see arguments of `meta_narnea`):
 
 ```{r include = TRUE, echo = TRUE, eval = FALSE}
+gexp.ges <- internal_ges(filt.counts, norm.method = 'pflpf', est.method = 'map')
+narnea.res <- readRDS('d496-blood/d496-blood_pisces-narnea.rds')
 ```
 
 #### Here, we generate an internal gene expression signature (GES) using a simple internal scaling. For other analyses with clearly defined test and reference populations, alternatively defined GES's can be analyzed in the same manner.
@@ -92,9 +109,21 @@ devtools::install_github("califano-lab/PISCES")
 #### We now perform a similar clustering analysis as before, this time utilizing the protein activity data. Note that NaRnEA produces two metrics; an effect size (PES) and a measure of statistical significance (NES). All downstream analysis should be performed using the PES, with the NES used only as a threshold of statistical significance during Master Regulator analyses:
 
 ```{r include = TRUE, echo = TRUE, eval = FALSE}
+narnea.dist <- cor_dist(narnea.res$PES)
+narnea.mds <- make_mds(narnea.dist)
+narnea.umap <- make_umap(narnea.res$PES)
+narnea.clust <- louvain_k(narnea.dist)
+narnea.mrs <- cluster_signature_mrs(pisces.gexp.list$norm.counts, narnea.clust$opt.clust, net.list)
 ```
 
 #### Finally, we identify candidate master regulators of each detected population and visualize using both volcano plots and a heatmap. This can be done in two ways, either by integration of the cell-specific NaRnEA results within each cluster or by generating a cluster-specific GES and re-generating cluster-specific NaRnEA results. The latter approach is more robust and is generally recommended:
 
+```{r include = TRUE, echo = TRUE, eval = FALSE}
+narnea.mrs <- cluster_signature_mrs(pisces.gexp.list$norm.counts, narnea.clust$opt.clust, net.list)
+cluster_mr_volcano(narnea.mrs, num.mrs = 10)
+```
 
+```{r include = TRUE, echo = TRUE, eval = FALSE}
+cluster_mr_heatmap(narnea.res$PES, dat.type = 'pact', clust.vec = narnea.clust$opt.clust, narnea.mrs)
+```
 
