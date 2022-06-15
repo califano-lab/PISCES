@@ -4,10 +4,12 @@
 \alias{make_umap}
 \title{Generates a UMAP using the uwot package.}
 \usage{
-make_umap(dat.mat)
+make_umap(dat.mat, dense = TRUE)
 }
 \arguments{
 \item{dat.mat}{Matrix of data (features X samples).}
+
+\item{dense.map}{Flag to use dense UMAP. Default of TRUE.}
 }
 \value{
 Two column matrix with UMAP representation of samples.
