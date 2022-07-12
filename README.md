@@ -25,12 +25,15 @@ NOTE: This version of the pipeline is a newer iteration, implementing new algori
 Here's how you can install the PISCES package:
 
 ```
-install.packages(c("cluster", "ggplot2", "devtools", "Seurat", 
-                   "pheatmap", "BiocManager", "RColorBrewer"))
-BiocManager::install("viper")
+# install cran packages
+install.packages("abind", "BiocManager", "circlize", "cluster", "devtools", 
+                 "ggplot2", "ggpubr", "ggrepel", "grDevices", "Matrix", 
+                 "RColorBrewer", "RSpectra", "Seurat", "uwot")
+# install bioconductor packages
 BiocManager::install("biomaRt")
-devtools::install_github("JEFworks/MUDAN")
-devtools::install_github(repo = "califano-lab/PISCES", force = TRUE, build_vignettes = TRUE)
+BiocManager::install("ComplexHeatmap")
+# install PISCES
+devtools::install_github("califano-lab/PISCES")
 ```
 You can then learn about how to use PISCES with our vignettes:
 
