@@ -16,7 +16,8 @@ cluster_signature_mrs(norm.counts, clust.vec, net.list, num.mrs = 10)
 \item{num.mrs}{Number of master regulators to return for each cluster. Default of 10.}
 }
 \value{
-A three member list w/ `positive` and `negative` MRs as well as the full NaRnEA results `mr.narnea`.
+A list; table of positive MRs (`positive`) and negative MRs (`negative`); 
+the cluster-specific NaRnEA results (`cluster.narnea`).
 }
 \description{
 Identifies cluster specific master regulators by generating cluter-specific signatures and running NaRnEA.

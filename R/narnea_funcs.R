@@ -1,33 +1,22 @@
-#' Generates a distance matrix from NaRnEA results sample-sample PES enrichment.
+#' Returns cluster-integrated NaRnEA results using Stouffer's method.
+#' PES values are averaged across groups, while NES values are Stouffer integrated.
 #' 
-#' @param pes.mat Matrix of PES values (proteins X samples).
-#' @param num.prots Number of proteins to use in each regulon. Default/minimum of 30. 
-#' WARNING: Using more proteins will increase runtime.
-#' @return A distance matrix (samples X samples).
+#' @param narnea.res NaRnEA result object with `PES` and `NES` members.
+#' @param clust.vec Vector of categorical labels.
+#' @return Integrated NaRnEA results; list with both `PES` and `NES` members.
 #' @export
-narnea_dist <- function(pes.mat, num.prots = 30) {
-  if (num.prots < 30) {
-    cat("WARNING: Cannot use fewer than 30 proteins. Setting `min.prots=30`.\n")
-    num.prots <- 30
-  }
+stouffer_narnea <- function(narnea.res, clust.vec) {
+  clust.names <- sort(unique(clust.vec))
   
-  # construct sample regulons
-  cat('Generating sample pseudo-regulons...')
-  sample.regs <- apply(pes.mat, 2, function(x) {
-    top.prots <- names(sort(abs(x), decreasing = TRUE))[1:num.prots]
-    aw.vec <- rev(1:num.prots / (num.prots + 1)); names(aw.vec) <- top.prots
-    am.vec <- sign(x[top.prots]); names(am.vec) <- top.prots
-    return(list('aw' = aw.vec, 'am' = am.vec))
-  })
-  # run NaRnEA
-  cat('Running NaRnEA...')
-  ss.narnea <- matrix_narnea(pes.mat, sample.regs)
-  # generate distance
-  cat('Computing distance...')
-  sym.pes <- (ss.narnea$PES + t(ss.narnea$PES)) / 2
-  diag(sym.pes) <- 1 # corrects for floating point precision issues when subtracting
-  pes.dist <- sqrt(1 - sym.pes)
-  return(pes.dist)
+  pes.mat <- Reduce(cbind, lapply(clust.names, function(x) {
+    rowMeans(narnea.res$PES[, which(clust.vec == x)])
+  }))
+  nes.mat <- Reduce(cbind, lapply(clust.names, function(x) {
+    rowSums(narnea.res$NES[, which(clust.vec == x)]) / length(which(clust.vec == x))
+  }))
+  colnames(pes.mat) <- clust.names; colnames(nes.mat) <- clust.names
+  
+  return(list('PES' = pes.mat, 'NES' = nes.mat))
 }
 
 #' Runs MetaNaRnEA using the given ges matrix and network list. 

@@ -13,6 +13,7 @@
 #' @export
 qc_filt <- function(raw.counts, min.depth = 0, max.depth = Inf, min.genes = 0, max.genes = Inf, max.mt = 1, min.gene.count,
                     species = c('hum', 'mur'), genes = c('symb', 'ensg')) {
+  data(mt_genes)
   # check arguments
   match.arg(species)
   if (missing(species)) { species <- 'hum' }
@@ -22,7 +23,7 @@ qc_filt <- function(raw.counts, min.depth = 0, max.depth = Inf, min.genes = 0, m
   # collect statistics
   sample.depth <- colSums(raw.counts)
   sample.genes <- apply(raw.counts, 2, function(x) {length(which(x > 0))})
-  mtg <- intersect(mt.genes[[paste(species, genes, sep = '.')]], rownames(raw.counts))
+  mtg <- intersect(mt_genes[[paste(species, genes, sep = '.')]], rownames(raw.counts))
   sample.mt <- apply(raw.counts, 2, function(x) {
     sum(x[mtg])
   })
@@ -161,7 +162,7 @@ ecdf_norm <- function(test.vec, ref.vec) {
 #' 
 #' @param filt.counts Matrix (features X samples) of filtered count data.
 #' @param norm.method Normalization method. One of `c('cpm', 'pflpf')`, uses `pflpf` by default.
-#' @param est.method Estimation method. One of `c('mle', 'map')`, with `map` by default.
+#' @param est.method Estimation method. One of `c('map', 'ps')`, with `map` by default.
 #' @param map.iter Number of iterations to use if using MAP estimation. Default of 10.
 #' @return GES Matrix (features X samples).
 #' @export

@@ -16,7 +16,7 @@ internal_ges(
 
 \item{norm.method}{Normalization method. One of `c('cpm', 'pflpf')`, uses `pflpf` by default.}
 
-\item{est.method}{Estimation method. One of `c('mle', 'map')`, with `map` by default.}
+\item{est.method}{Estimation method. One of `c('map', 'ps')`, with `map` by default.}
 
 \item{map.iter}{Number of iterations to use if using MAP estimation. Default of 10.}
 }
