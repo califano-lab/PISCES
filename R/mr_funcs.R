@@ -383,6 +383,15 @@ get_mr_set <- function(mr.list, num.mrs = 10, reg.class = c('regulator', 'marker
   match.arg(reg.sign)
   if (missing(reg.sign)) {reg.sign = 'pos'}
   
+  # detect no regulators presnet
+  mr.unlist <- switch(reg.sign,
+                      'pos' = unlist(mr.list$positive),
+                      'neg' = unlist(mr.list$negative))
+  if (length(mr.unlist) == 0) {
+    cat("Error: No regulators of the selected sign in the given list, possibly because none are significant.\n")
+    return(NULL)
+  }
+  
   # detect species and load regulator set
   if (str_detect(unlist(mr.list$positive)[1], "[[:lower:]]")) { # mouse 
     data("mouse_regulators")

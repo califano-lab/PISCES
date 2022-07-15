@@ -8,6 +8,7 @@
 qc_plot <- function(raw.counts, species = c('hum', 'mur'), genes = c('symb', 'ensg')) {
   require(ggplot2)
   require(ggpubr)
+  data(mt_genes)
   
   # check arguments
   match.arg(species)
@@ -18,7 +19,7 @@ qc_plot <- function(raw.counts, species = c('hum', 'mur'), genes = c('symb', 'en
   # collect statistics
   sample.depth <- colSums(raw.counts)
   sample.genes <- apply(raw.counts, 2, function(x) {length(which(x > 0))})
-  mtg <- intersect(mt.genes[[paste(species, genes, sep = '.')]], rownames(raw.counts))
+  mtg <- intersect(mt_genes[[paste(species, genes, sep = '.')]], rownames(raw.counts))
   sample.mt <- apply(raw.counts, 2, function(x) {
     sum(x[mtg])
   })
@@ -98,12 +99,17 @@ cluster_mr_volcano <- function(mr.obj, num.mrs = 10) {
 #' Should be a list with a `cluster.narnea` element, containing cluster-specific NaRnEA results (NES and PES matrices).
 #' @param num.mrs Number of master regulators to display. Default of 10.
 #' @param marker.set Optional list of markers to use in lieu of master regulators.
+#' @param group.means Flag to plot the mean of each group rather than each sample. Default of FALSE.
+#' @param scale.rows Flag to scale rows for plot color. Default of FALSE.
+#' @param plot.title Optional plot title argument. Will be generated according to other arguments if not specified.
+#' @param clust.rows Clusters rows if set to true. Default of FALSE.
 #' @return A ComplexHeatmap object.
 #' @export
-cluster_mr_heatmap <- function(dat.mat, dat.type = c('gexp', 'pact'), clust.vec, mr.list, num.mrs = 10, reg.class = c('regulator', 'marker'), marker.set = NULL) {
+cluster_mr_heatmap <- function(dat.mat, dat.type = c('gexp', 'pact'), clust.vec, mr.list, num.mrs = 10, reg.class = c('regulator', 'marker'), 
+                               marker.set = NULL, group.means = FALSE, scale.rows = FALSE, plot.title = NULL, clust.rows = FALSE) {
   require(circlize)
   require(ComplexHeatmap)
-  
+  dat.mat <- as.matrix(dat.mat)
   
   match.arg(reg.class)
   if (missing(reg.class)) {reg.class = 'regulator'}
@@ -111,7 +117,9 @@ cluster_mr_heatmap <- function(dat.mat, dat.type = c('gexp', 'pact'), clust.vec,
   if (missing(dat.type)) {dat.type = 'pact'}
   
   # set title
-  if (is.null(marker.set)) {
+  if (!is.null(plot.title)) {
+    map.title <- plot.title
+  } else if (is.null(marker.set)) {
     if (reg.class == 'regulator') {
       map.title <- switch(dat.type,
                           'gexp' = 'Cluster Top DE Gene Expression - Candidate Regulators',
@@ -131,22 +139,42 @@ cluster_mr_heatmap <- function(dat.mat, dat.type = c('gexp', 'pact'), clust.vec,
   clust.names <- sort(unique(clust.vec))
   num.clust <- length(clust.names)
   clust.vec <- sort(clust.vec)
+  clust.colors <- group_colors(num.clust); names(clust.colors) <- clust.names
   # find protein set
   if (!missing(marker.set)) {
-    feature.set <- marker.set
+    feature.set <- as.data.frame(intersect(marker.set, rownames(dat.mat)))
   } else {
     feature.set <- get_mr_set(mr.list, num.mrs, reg.class, reg.sig = 'pos')
+    if (is.null(feature.set)) {
+      return()
+    }
   }
   # set plot data
   plot.mat <- dat.mat[feature.set[,1], names(clust.vec)]
+  # take mean if specified; build column annotations appropriately
+  if (group.means) {
+    # take group means
+    plot.mat <- Reduce('cbind', lapply(clust.names, function(x) {
+      clust.samps <- which(clust.vec == x)
+      clust.mean <- rowMeans(plot.mat[, clust.samps])
+    }))
+    colnames(plot.mat) <- clust.names
+    # set annotations
+    col.annot <- HeatmapAnnotation('Cluster' = clust.names, col = list('Cluster' = clust.colors))
+    col.gaps <- 1:length(clust.names)
+  } else {
+    # set annotations
+    col.annot <- HeatmapAnnotation('Cluster' = clust.vec, col = list('Cluster' = clust.colors))
+    col.gaps <- clust.vec
+  }
   # set plot colors
+  if (scale.rows) {
+    plot.mat <- t(apply(plot.mat, 1, scale))
+  }
+  col.breaks <- quantile_breaks(plot.mat)
   col.fun <- switch(dat.type,
-                    'gexp' = col.fun <- colorRamp2(quantile_breaks(plot.mat), color_levels('gexp', 7)),
-                    'pact' = col.fun <- colorRamp2(quantile_breaks(plot.mat), color_levels('pact', 7)))
-  # build column annotations
-  clust.colors <- group_colors(num.clust); names(clust.colors) <- clust.names
-  col.annot <- HeatmapAnnotation('Cluster' = clust.vec, col = list('Cluster' = clust.colors))
-  col.gaps <- clust.vec
+                    'gexp' = col.fun <- colorRamp2(col.breaks, color_levels('gexp', length(col.breaks))),
+                    'pact' = col.fun <- colorRamp2(col.breaks, color_levels('pact', length(col.breaks))))
   # build row annotations + set title
   if (is.null(marker.set)) {
     row.annot <- rowAnnotation('Cluster' = feature.set[,2], 
@@ -163,7 +191,7 @@ cluster_mr_heatmap <- function(dat.mat, dat.type = c('gexp', 'pact'), clust.vec,
                          col = col.fun,
                          top_annotation = col.annot, column_split = col.gaps,
                          left_annotation = row.annot, row_split = row.gaps,
-                         cluster_rows = FALSE, cluster_columns = FALSE,
+                         cluster_rows = clust.rows, cluster_columns = FALSE,
                          show_row_names = TRUE, show_column_names = FALSE,
                          column_title = map.title, row_title = NULL)
   return(heatmap.obj)

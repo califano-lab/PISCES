@@ -4,7 +4,7 @@
 \alias{cluster_signature_mrs}
 \title{Identifies cluster specific master regulators by generating cluter-specific signatures and running NaRnEA.}
 \usage{
-cluster_signature_mrs(norm.counts, clust.vec, net.list, num.mrs = 10)
+cluster_signature_mrs(norm.counts, clust.vec, net.list)
 }
 \arguments{
 \item{norm.counts}{Matrix of normalized counts (features X samples).}
@@ -12,8 +12,6 @@ cluster_signature_mrs(norm.counts, clust.vec, net.list, num.mrs = 10)
 \item{clust.vec}{Clustering vector.}
 
 \item{net.list}{List of ARACNe3 networks.}
-
-\item{num.mrs}{Number of master regulators to return for each cluster. Default of 10.}
 }
 \value{
 A list; table of positive MRs (`positive`) and negative MRs (`negative`); 

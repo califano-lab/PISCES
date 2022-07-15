@@ -4,14 +4,14 @@
 \alias{kappa_cluster_mrs}
 \title{Identifies cluster master regulators based on Cohen's Kappa.}
 \usage{
-kappa_cluster_mrs(narnea.res, clust.vec, num.mrs = 10)
+kappa_cluster_mrs(narnea.res, clust.vec, kappa.thresh = 0.5)
 }
 \arguments{
 \item{narnea.res}{NaRnEA result object with `PES` and `NES` members.}
 
 \item{clust.vec}{Vector of clustering labels.}
 
-\item{num.mrs}{Number of MRs to return.}
+\item{kappa.thresh}{Threshold to consider a protein an MR. Default of 0.5.}
 }
 \value{
 A list; table of positive MRs (`positive`) and negative MRs (`negative`); 
