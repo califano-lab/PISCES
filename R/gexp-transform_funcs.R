@@ -58,7 +58,7 @@ cpm_norm <- function(dat.mat, l2 = FALSE, remove.zeroes = TRUE) {
   # remove genes w/ zero counts
   if (remove.zeroes) { dat.mat <- dat.mat[which(rowSums(dat.mat) > 0),] }
   # perform cpm normalization
-  dat.mat <- apply(ct.mat, 2, function(x) {x / sum(x)}) * 1e6
+  dat.mat <- apply(dat.mat, 2, function(x) {x / sum(x)}) * 1e6
   # log2 normalize rows
   if (l2) { dat.mat <- log2(dat.mat + 1) }
   # return matrix
