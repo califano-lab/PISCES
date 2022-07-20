@@ -134,7 +134,6 @@ cluster_mr_heatmap <- function(dat.mat, dat.type = c('gexp', 'pact'), clust.vec,
                         'gexp' = 'Cluster Marker Expression',
                         'pact' = 'Cluster Marker Activity')
   }
-  
   # collect parameters
   clust.names <- sort(unique(clust.vec))
   num.clust <- length(clust.names)
@@ -156,7 +155,7 @@ cluster_mr_heatmap <- function(dat.mat, dat.type = c('gexp', 'pact'), clust.vec,
     # take group means
     plot.mat <- Reduce('cbind', lapply(clust.names, function(x) {
       clust.samps <- which(clust.vec == x)
-      clust.mean <- rowMeans(plot.mat[, clust.samps])
+      clust.mean <- rowMeans(plot.mat[, clust.samps, drop = FALSE])
     }))
     colnames(plot.mat) <- clust.names
     # set annotations
@@ -170,6 +169,7 @@ cluster_mr_heatmap <- function(dat.mat, dat.type = c('gexp', 'pact'), clust.vec,
   # set plot colors
   if (scale.rows) {
     plot.mat <- t(apply(plot.mat, 1, scale))
+    plot.mat[which(is.nan(plot.mat))] <- 0
   }
   col.breaks <- quantile_breaks(plot.mat)
   col.fun <- switch(dat.type,
