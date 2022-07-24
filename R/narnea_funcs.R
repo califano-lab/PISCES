@@ -1,3 +1,45 @@
+#' Performs NaRnEA on multiple samples using network matching. Those samples with matched networks
+#' will have protein activity generated with one network. Those without will be analyzed using MetaNaRnEA.
+#' 
+#' @param ges.mat GES matrix (genes X samples).
+#' @param net.list List of networks appropriately parametrized for NaRnEA.
+#' @param net.match.vec Named vector of the same length as the number of samples, with either the name of a matched network or NA
+#' @return NaRnEA object
+#' @export
+network_match_narnea <- function(ges.mat, net.list, net.match.vec) {
+  narnea.list <- list()
+  # run narnea with a single network for each network name
+  for (net.name in names(net.list)) {
+    cat(paste("Analyzing samples matched with the '", net.name, "' network...\n", sep = ''))
+    # get the matched samples and run narnea
+    match.samps <- names(net.match.vec)[which(net.match.vec == net.name)]
+    match.ges <- ges.mat[,match.samps]
+    match.narnea <- matrix_narnea(match.ges, net.list[[net.name]])
+    # add to list
+    narnea.list[[net.name]] <- match.narnea
+  }
+  # run narnea for the unmatched samples
+  unmatch.samps <- names(net.match.vec)[which(is.na(net.match.vec))]
+  unmatch.ges <- ges.mat[, unmatch.samps]
+  unmatch.narnea <- meta_narnea(unmatch.ges, net.list)
+  narnea.list[['unmatch']] <- list('NES' = unmatch.narnea$NES, 'PES' = unmatch.narnea$PES)
+  # create unified narnea matrices
+  full.prot.list <- unique(unlist(sapply(narnea.list, function(x) {rownames(x$PES)})))
+  padded.narnea.list <- lapply(narnea.list, function(x) {
+    missing.prots <- setdiff(full.prot.list, rownames(x$NES))
+    pad.mat <- matrix(0L, nrow = length(missing.prots), ncol = ncol(x$NES))
+    pad.nes <- rbind(x$NES, pad.mat)
+    pad.pes <- rbind(x$PES, pad.mat)
+    rownames(pad.nes) <- c(rownames(x$NES), missing.prots)
+    rownames(pad.pes) <- c(rownames(x$PES), missing.prots)
+    return(list('NES' = pad.nes[full.prot.list,], 'PES' = pad.pes[full.prot.list,]))
+  })
+  combine.nes <- Reduce('cbind', lapply(padded.narnea.list, function(x) {x$NES}))
+  combine.pes <- Reduce('cbind', lapply(padded.narnea.list, function(x) {x$PES}))
+  # return final list
+  return(list('NES' = combine.nes, 'PES' = combine.pes, 'unmatch.weights' = unmatch.narnea$weights))
+}
+
 #' Returns cluster-integrated NaRnEA results using Stouffer's method.
 #' PES values are averaged across groups, while NES values are Stouffer integrated.
 #' 

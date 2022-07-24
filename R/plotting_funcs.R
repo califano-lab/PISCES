@@ -141,7 +141,12 @@ cluster_mr_heatmap <- function(dat.mat, dat.type = c('gexp', 'pact'), clust.vec,
   clust.colors <- group_colors(num.clust); names(clust.colors) <- clust.names
   # find protein set
   if (!missing(marker.set)) {
-    feature.set <- as.data.frame(intersect(marker.set, rownames(dat.mat)))
+    if (class(marker.set) != 'data.frame') {
+      feature.set <- as.data.frame(intersect(marker.set, rownames(dat.mat)))
+    } else {
+      present.markers <- which(marker.set[,1] %in% rownames(dat.mat))
+      feature.set <- marker.set[present.markers,]
+    }
   } else {
     feature.set <- get_mr_set(mr.list, num.mrs, reg.class, reg.sig = 'pos')
     if (is.null(feature.set)) {
@@ -181,6 +186,14 @@ cluster_mr_heatmap <- function(dat.mat, dat.type = c('gexp', 'pact'), clust.vec,
                                col = list('Cluster' = clust.colors), 
                                show_annotation_name = FALSE,
                                show_legend = FALSE) 
+    row.gaps <- feature.set[,2]
+  } else if (ncol(feature.set) > 1) {
+    m.group.colors <- group_colors(length(unique(feature.set[,2])))
+    names(m.group.colors) <- unique(feature.set[,2])
+    row.annot <- rowAnnotation('Marker Group' = feature.set[,2], 
+                               col = list('Marker Group' = m.group.colors), 
+                               show_annotation_name = FALSE,
+                               show_legend = TRUE) 
     row.gaps <- feature.set[,2]
   } else {
     row.annot <- NULL
