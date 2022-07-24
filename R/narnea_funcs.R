@@ -13,6 +13,7 @@ network_match_narnea <- function(ges.mat, net.list, net.match.vec) {
     cat(paste("Analyzing samples matched with the '", net.name, "' network...\n", sep = ''))
     # get the matched samples and run narnea
     match.samps <- names(net.match.vec)[which(net.match.vec == net.name)]
+    if (length(match.samps) == 0) {next}
     match.ges <- ges.mat[,match.samps]
     match.narnea <- matrix_narnea(match.ges, net.list[[net.name]])
     # add to list
@@ -20,9 +21,11 @@ network_match_narnea <- function(ges.mat, net.list, net.match.vec) {
   }
   # run narnea for the unmatched samples
   unmatch.samps <- names(net.match.vec)[which(is.na(net.match.vec))]
-  unmatch.ges <- ges.mat[, unmatch.samps]
-  unmatch.narnea <- meta_narnea(unmatch.ges, net.list)
-  narnea.list[['unmatch']] <- list('NES' = unmatch.narnea$NES, 'PES' = unmatch.narnea$PES)
+  if (length(unmatch.samps) > 0) {
+    unmatch.ges <- ges.mat[, unmatch.samps]
+    unmatch.narnea <- meta_narnea(unmatch.ges, net.list)
+    narnea.list[['unmatch']] <- list('NES' = unmatch.narnea$NES, 'PES' = unmatch.narnea$PES)
+  }
   # create unified narnea matrices
   full.prot.list <- unique(unlist(sapply(narnea.list, function(x) {rownames(x$PES)})))
   padded.narnea.list <- lapply(narnea.list, function(x) {

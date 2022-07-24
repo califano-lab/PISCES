@@ -155,6 +155,7 @@ cluster_mr_heatmap <- function(dat.mat, dat.type = c('gexp', 'pact'), clust.vec,
   }
   # set plot data
   plot.mat <- dat.mat[feature.set[,1], names(clust.vec)]
+  print(dim(plot.mat))
   # take mean if specified; build column annotations appropriately
   if (group.means) {
     # take group means
