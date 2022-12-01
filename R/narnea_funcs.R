@@ -20,7 +20,8 @@ network_match_narnea <- function(ges.mat, net.list, net.match.vec) {
     narnea.list[[net.name]] <- match.narnea
   }
   # run narnea for the unmatched samples
-  unmatch.samps <- names(net.match.vec)[which(is.na(net.match.vec))]
+  unmatch.samps <- names(net.match.vec)[which(!(net.match.vec %in% names(net.list)))] 
+  print(length(unmatch.samps))
   if (length(unmatch.samps) > 0) {
     unmatch.ges <- ges.mat[, unmatch.samps]
     unmatch.narnea <- meta_narnea(unmatch.ges, net.list)
@@ -54,10 +55,10 @@ stouffer_narnea <- function(narnea.res, clust.vec) {
   clust.names <- sort(unique(clust.vec))
   
   pes.mat <- Reduce(cbind, lapply(clust.names, function(x) {
-    rowMeans(narnea.res$PES[, which(clust.vec == x)])
+    rowMeans(narnea.res$PES[, which(clust.vec == x), drop = FALSE])
   }))
   nes.mat <- Reduce(cbind, lapply(clust.names, function(x) {
-    rowSums(narnea.res$NES[, which(clust.vec == x)]) / length(which(clust.vec == x))
+    rowSums(narnea.res$NES[, which(clust.vec == x), drop = FALSE]) / length(which(clust.vec == x))
   }))
   colnames(pes.mat) <- clust.names; colnames(nes.mat) <- clust.names
   
@@ -241,6 +242,8 @@ matrix_narnea <- function(ges.mat, regulon.list, seed.val = 343, min.targets = 3
   ## remove regulons with too few targets
   regulon.list <- regulon.list[which(sapply(regulon.list, function(x) {length(x$aw)}) >= min.targets)]
   if (length(regulon.list) == 0) {print('No regulons of adequate size'); return(NULL)}
+  ## remove any duplicate regulons
+  regulon.list <- regulon.list[!duplicated(names(regulon.list))]
   
   ## correct signature for zeros
   ges.mat <- apply(ges.mat, 2, function(x) {
@@ -275,9 +278,9 @@ matrix_narnea <- function(ges.mat, regulon.list, seed.val = 343, min.targets = 3
   E.r <- (g + 1) /2
   E.r2 <- (2*g^2 + 3*g + 1) / 6
   E.rs <- t(as.matrix((1 / g) * colSums(R * S)))
-  ## precalculated matrices
+  ## precalculated matrices 
   AM.abs.mat <- 1 - abs(AM.mat)
-  AM.abs.mat[which(AM.mat == 0)] <- 0
+  AM.abs.mat[which(AM.mat == 0)] <- 0 #(forces non-targets back to zero weight as opposed to one)
   AW.AM.prod <- AW.mat * AM.mat
   AW.AM.abs.prod <- AW.mat * AM.abs.mat
   

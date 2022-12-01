@@ -189,7 +189,7 @@ cluster_mr_heatmap <- function(dat.mat, dat.type = c('gexp', 'pact'), clust.vec,
                                show_legend = FALSE) 
     row.gaps <- feature.set[,2]
   } else if (ncol(feature.set) > 1) {
-    m.group.colors <- group_colors(length(unique(feature.set[,2])))
+    m.group.colors <- group_colors(length(unique(feature.set[,2])), offset = 30)
     names(m.group.colors) <- unique(feature.set[,2])
     row.annot <- rowAnnotation('Marker Group' = feature.set[,2], 
                                col = list('Marker Group' = m.group.colors), 

@@ -292,6 +292,7 @@ sig_features <- function(nes.mat, p.val.thresh = 0.05) {
 #' @return A list; `log.p` containing the log p-value and `group.residuals` (group mean rank - overall mean rank).
 #' @export
 log_kw <- function(feat.vec, group.vec) {
+
   # calculate overall values
   rank.feat <- rank(feat.vec)
   group.table <- table(group.vec)
