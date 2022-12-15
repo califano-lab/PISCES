@@ -152,6 +152,7 @@ cluster_mr_heatmap <- function(dat.mat, dat.type = c('gexp', 'pact'), clust.vec,
     if (is.null(feature.set)) {
       return()
     }
+    feature.set[,2] <- tryCatch(as.numeric(feature.set[,2]), warning = function(w) {return(feature.set[,2])})
   }
   # set plot data
   plot.mat <- dat.mat[feature.set[,1], names(clust.vec)]
