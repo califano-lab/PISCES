@@ -507,7 +507,7 @@ make_cmfa <- function(dat_mat, clustering, num_neighbors = 10, sub_size = 200,
 #' @return            A list of matrices, each representing gene expression
 #'                    data for a specific cluster.
 generate_cluster_matrices <- function(dat_mat, clustering, size_thresh) {
-  ClusterMatrices(dat_mat, clustering, size_thresh = size_thresh)
+  cluster_matrices(dat_mat, clustering, size_thresh = size_thresh)
 }
 
 #' Filter Out Empty Cluster Matrices
@@ -546,7 +546,7 @@ filter_non_empty_matrices <- function(clust_mats) {
 process_cluster <- function(mat, num_neighbors, cluster_idx, out_dir,
                             out_name, sub_size) {
   # Generate metacell matrix
-  meta_mat <- MetaCells(mat, num_neighbors)
+  meta_mat <- meta_cells(mat, num_neighbors)
 
   # Save the complete metacell matrix
   save_meta_mat(meta_mat, out_dir,
@@ -679,41 +679,60 @@ subset_matrix <- function(mat, sub_size) {
   mat[, sample(ncol(mat), sub_size)]
 }
 
-#' Generates cluster-specific matrices for given data based on a clustering object.
+#' Generate and Optionally Save Cluster-Specific Matrices
 #'
-#' @param dat.mat Data matrix to be split (features X samples).
-#' @param clust Clustering object.
-#' @param savePath If specified, matrices will be saved. Otherwise, a list of matrices will be returned.
-#' @param savePref Preface for file names, if saving.
-#' @param sizeThresh Smallest size cluster for which a matrix will be created. Default 300.
-#' @return If files are NOT saved, returnes a list of matrices, one for each cluster. Otherwise, returns nothing.
-ClusterMatrices <- function(dat.mat, clust, savePath, savePref, sizeThresh = 100) {
-  ## set savePath if it is specified
-  if (!missing(savePath)) {
-    if (!missing(savePref)) {
-      savePath <- paste(savePath, savePref, sep = "")
-    }
-  } else {
-    clust.mats <- list()
-  }
-  ## generate matrices
-  clust.table <- table(clust)
-  for (i in 1:length(clust.table)) {
-    if (clust.table[i] > sizeThresh) {
-      clust.cells <- which(clust == names(clust.table)[i])
-      clust.mat <- dat.mat[, clust.cells]
-      clust.mat <- clust.mat[rowSums(clust.mat) >= 1, ]
-      if (missing(savePath)) {
-        clust.mats[[i]] <- clust.mat
+#' Splits the data matrix into cluster-specific matrices based on provided
+#' cluster labels. Can save the resulting matrices to files if a save path is
+#' specified.
+#'
+#' @param dat_mat     Data matrix to be split (features x samples).
+#' @param clust       Clustering labels for samples.
+#' @param save_path   Optional path for saving the resulting matrices; if not
+#'                    provided, matrices are returned in a list.
+#' @param save_pref   Optional prefix for file names when saving matrices.
+#' @param size_thresh Minimum number of samples required for a cluster to be
+#'                    processed; default is 100.
+#'
+#' @return            A list of matrices, one for each cluster, if `save_path`
+#'                    is not provided. Otherwise, nothing is explicitly
+#'                    returned.
+cluster_matrices <- function(dat_mat, clust, save_path = NA,
+                             save_pref = "", size_thresh = 100) {
+  clust_table <- table(clust)
+  clust_mats <- list()
+
+  for (i in seq_along(clust_table)) {
+    if (clust_table[i] > size_thresh) {
+      clust_cells <- which(clust == names(clust_table)[i])
+      clust_mat <- dat_mat[, clust_cells]
+      clust_mat <- clust_mat[rowSums(clust_mat) >= 1, ]
+
+      if (is.na(save_path)) {
+        clust_mats[[names(clust_table)[i]]] <- clust_mat
       } else {
-        saveRDS(clust.mat, file = paste(savePath, "_", names(clust.table)[i], ".rds", sep = ""))
+        save_cluster_matrix(clust_mat, save_path,
+                            save_pref, names(clust_table)[i])
       }
     }
   }
-  ## return if not saving
-  if (missing(savePath)) {
-    return(clust.mats)
+
+  if (is.na(save_path)) {
+    return(clust_mats)
   }
+}
+
+#' Save a Cluster Matrix to an RDS File
+#'
+#' Saves a given cluster matrix to an RDS file, constructing the file name
+#' based on provided parameters.
+#'
+#' @param clust_mat  The cluster-specific matrix to save.
+#' @param save_path  Directory path where the file will be saved.
+#' @param save_pref  Prefix to be added to the file name.
+#' @param clust_name Name of the cluster, used in the file name.
+save_cluster_matrix <- function(clust_mat, save_path, save_pref, clust_name) {
+  file_path <- file.path(save_path, paste0(save_pref, "_", clust_name, ".rds"))
+  saveRDS(clust_mat, file = file_path)
 }
 
 #' Performs a CPM normalization on the given data.
