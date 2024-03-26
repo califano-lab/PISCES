@@ -40,6 +40,7 @@ library(PISCES)
 #'                                hue_pal by default.
 #' @param scaled                  Whether the data is already scaled; applies
 #'                                row-wise z-score scaling if FALSE.
+#'
 #' @return                        Heatmap plot.
 gene_heatmap_plot <- function(dat, clust, genes, genes_by_cluster = TRUE,
                               n_top_genes_per_cluster = 5, color_palette = NA,
@@ -95,6 +96,7 @@ gene_heatmap_plot <- function(dat, clust, genes, genes_by_cluster = TRUE,
 #' @param identities    Vector of unique identities for which colors are
 #'                      needed.
 #' @param color_palette Optional custom color palette.
+#'
 #' @return              A color palette vector.
 generate_color_palette <- function(identities, color_palette) {
   if (is.na(color_palette)) {
@@ -120,6 +122,7 @@ calculate_z_score <- function(x) {
 #' extreme values.
 #'
 #' @param t Numeric matrix for which to determine breaks.
+#'
 #' @return  Vector of breaks for the heatmap color scale.
 generate_mat_breaks <- function(t) {
   quantile_breaks <- function(xs, n = 10) {
@@ -151,6 +154,7 @@ generate_mat_breaks <- function(t) {
 #'                                grouped by their cluster.
 #' @param n_top_genes_per_cluster Number of top genes per cluster to include if
 #'                                genes are grouped by cluster.
+#'
 #' @return                        A list containing 'anno_colors' for column
 #'                                annotations and 'anno_row' for row
 #'                                annotations (if applicable).
@@ -182,6 +186,7 @@ generate_annotations <- function(df, my_color_palette, genes_by_cluster,
 #'              samples.
 #' @param clust Matrix with rows as samples and each column as a clustering
 #'              vector for a given resolution.
+#'
 #' @return      List containing the means and standard deviations of silhouette
 #'              scores for each clustering resolution.
 sil_subsample <- function(mat, clust) {
@@ -210,6 +215,7 @@ sil_subsample <- function(mat, clust) {
 #'
 #' @param num_subsamples  Number of subsamples to compute.
 #' @param num_resolutions Number of resolution values/clustering vectors.
+#'
 #' @return                Initialized matrix for storing silhouette scores.
 initialize_silhouette_scores <- function(num_subsamples, num_resolutions) {
   matrix(rep(NA, num_subsamples * num_resolutions), nrow = num_subsamples)
@@ -219,6 +225,7 @@ initialize_silhouette_scores <- function(num_subsamples, num_resolutions) {
 #'
 #' @param mat       Data matrix.
 #' @param num_cells Number of cells to sample.
+#'
 #' @return          Indices of sampled cells.
 sample_cells <- function(mat, num_cells) {
   sample(seq_len(ncol(mat)), min(num_cells, ncol(mat)))
@@ -227,6 +234,7 @@ sample_cells <- function(mat, num_cells) {
 #' Compute distance matrix using Pearson correlation
 #'
 #' @param mat Subsampled data matrix.
+#'
 #' @return Distance matrix.
 compute_distance_matrix <- function(mat) {
   as.dist(1 - cor(mat, method = "pearson"))
@@ -236,6 +244,7 @@ compute_distance_matrix <- function(mat) {
 #'
 #' @param clustering      Clustering vector for the subsampled cells.
 #' @param distance_matrix Distance matrix for the subsampled cells.
+#'
 #' @return                Mean silhouette width for the clustering.
 compute_silhouette_width <- function(clustering, distance_matrix) {
   if (length(unique(clustering)) <= 1) return(0)
@@ -245,36 +254,104 @@ compute_silhouette_width <- function(clustering, distance_matrix) {
 }
 
 
-## bug-fixed version of CreateBigSingleRObject from singleR pipeline.
-# in singleR version the internal function would default to fine.tune=T regardless of input parameter settings
-CreateBigSingleRObjectv2 <- function(counts, annot = NULL, project.name, xy, clusters, N = 10000,
-                                     min.genes = 200, technology = "10X", species = "Human", citation = "",
-                                     ref.list = list(), normalize.gene.length = F, variable.genes = "de",
-                                     fine.tune = T, reduce.file.size = T, do.signatures = F, do.main.types = T,
-                                     temp.dir = getwd(), numCores = SingleR.numCores) {
-  n <- ncol(counts)
-  s <- seq(1, n, by = N)
-  dir.create(paste0(temp.dir, "/singler.temp/"), showWarnings = FALSE)
-  for (i in s) {
-    print(i)
-    A <- seq(i, min(i + N - 1, n))
-    singler <- CreateSinglerObject(counts[, A],
-      annot = annot[A],
-      project.name = project.name, min.genes = min.genes,
-      technology = technology, species = species, citation = citation,
-      do.signatures = do.signatures, clusters = NULL, numCores = numCores, fine.tune = fine.tune
-    )
-    save(singler, file = paste0(temp.dir, "/singler.temp/", project.name, ".", i, ".RData"))
+#' Create a large SingleR object with improved control over tuning
+#'
+#' This function creates a SingleR object for large datasets by processing in
+#' chunks, addressing the issue in the original SingleR where fine tuning was
+#' always enabled.
+#'
+#' @param counts                Expression count matrix with genes in rows and
+#'                              cells in columns.
+#' @param annot                 Optional annotation vector for cells.
+#' @param project.name          Name of the project for file naming.
+#' @param xy                    Coordinates for cells, typically used for
+#'                              visualization.
+#' @param clusters              Cluster assignments for cells.
+#' @param N                     Number of cells to process in each chunk.
+#' @param min.genes             Minimum number of genes for filtering cells.
+#' @param technology            Single-cell technology used (e.g., "10X").
+#' @param species               Species name (e.g., "Human").
+#' @param citation              Citation or reference for the dataset.
+#' @param ref.list              Reference list for SingleR classification.
+#' @param normalize.gene.length Logical indicating whether to normalize by gene
+#'                              length.
+#' @param variable.genes        Method for selecting variable genes, default is
+#'                              "de" (differentially expressed).
+#' @param fine.tune             Logical indicating whether to fine-tune SingleR
+#'                              results.
+#' @param reduce.file.size      Logical indicating whether to reduce file size
+#'                              by omitting some SingleR slots.
+#' @param do.signatures         Logical indicating whether to compute signature
+#'                              scores.
+#' @param do.main.types         Logical indicating whether to classify main
+#'                              cell types.
+#' @param temp.dir              Directory to store temporary SingleR objects.
+#' @param numCores              Number of cores to use for parallel processing.
+#'
+#' @return A combined SingleR object created from chunks.
+CreateBigSingleRObjectv2 <- function(counts, annot = NULL, project.name, xy,
+                                     clusters, N = 10000, min.genes = 200,
+                                     technology = "10X", species = "Human",
+                                     citation = "", ref.list = list(),
+                                     normalize.gene.length = FALSE,
+                                     variable.genes = "de", fine.tune = TRUE,
+                                     reduce.file.size = TRUE,
+                                     do.signatures = FALSE,
+                                     do.main.types = TRUE,
+                                     temp.dir = getwd(),
+                                     numCores = SingleR.numCores) {
+  setup_temp_dir(temp.dir, project.name)
+  cell_indices <- split_into_chunks(ncol(counts), N)
+
+  for (A in cell_indices) {
+    process_chunk(A, counts, annot, project.name, min.genes, technology,
+                  species, citation, do.signatures, numCores, fine.tune,
+                  temp.dir)
   }
-  singler.objects.file <- list.files(paste0(temp.dir, "/singler.temp/"), pattern = "RData", full.names = T)
-  singler.objects <- list()
-  for (i in 1:length(singler.objects.file)) {
-    load(singler.objects.file[[i]])
-    singler.objects[[i]] <- singler
-  }
-  singler <- SingleR.Combine(singler.objects, order = colnames(counts), clusters = clusters, xy = xy)
-  singler
+
+  singler_objects <- load_singler_objects(temp.dir, project.name)
+  combine_singler_objects(singler_objects, colnames(counts), clusters, xy)
 }
+
+setup_temp_dir <- function(temp.dir, project.name) {
+  dir.create(file.path(temp.dir, "singler.temp"), showWarnings = FALSE)
+}
+
+split_into_chunks <- function(total_cells, chunk_size) {
+  split(seq_len(total_cells), ceiling(seq_len(total_cells) / chunk_size))
+}
+
+process_chunk <- function(cell_indices, counts, annot, project.name, min.genes,
+                          technology, species, citation, do.signatures,
+                          numCores, fine.tune, temp.dir) {
+  singler <- CreateSinglerObject(counts[, cell_indices],
+                                 annot = annot[cell_indices],
+                                 project.name = project.name,
+                                 min.genes = min.genes,
+                                 technology = technology, species = species,
+                                 citation = citation,
+                                 do.signatures = do.signatures,
+                                 clusters = NULL, numCores = numCores,
+                                 fine.tune = fine.tune)
+  save(singler, file = file.path(temp.dir, "singler.temp",
+                                 paste0(project.name, ".",
+                                        cell_indices[1], ".RData")))
+}
+
+load_singler_objects <- function(temp.dir, project.name) {
+  singler_files <- list.files(file.path(temp.dir, "singler.temp"),
+                              pattern = "RData", full.names = TRUE)
+  lapply(singler_files, function(f) {
+    load(f)
+    singler
+  })
+}
+
+combine_singler_objects <- function(singler_objects, cell_order, clusters, xy) {
+  SingleR.Combine(singler_objects, order = cell_order,
+                  clusters = clusters, xy = xy)
+}
+
 
 #' Identifies MRs on a cell-by-cell basis and returns a merged, unique list of all such MRs.
 #'
