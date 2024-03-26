@@ -288,68 +288,131 @@ compute_silhouette_width <- function(clustering, distance_matrix) {
 #' @param temp.dir              Directory to store temporary SingleR objects.
 #' @param numCores              Number of cores to use for parallel processing.
 #'
-#' @return A combined SingleR object created from chunks.
-CreateBigSingleRObjectv2 <- function(counts, annot = NULL, project.name, xy,
-                                     clusters, N = 10000, min.genes = 200,
-                                     technology = "10X", species = "Human",
-                                     citation = "", ref.list = list(),
-                                     normalize.gene.length = FALSE,
-                                     variable.genes = "de", fine.tune = TRUE,
-                                     reduce.file.size = TRUE,
-                                     do.signatures = FALSE,
-                                     do.main.types = TRUE,
-                                     temp.dir = getwd(),
-                                     numCores = SingleR.numCores) {
-  setup_temp_dir(temp.dir, project.name)
-  cell_indices <- split_into_chunks(ncol(counts), N)
+#' @return                      A combined SingleR object created from chunks.
+create_big_single_r_object_v2 <- function(counts, annot = NULL, project_name,
+                                          xy, clusters, n = 10000,
+                                          min_genes = 200, technology = "10X",
+                                          species = "Human", citation = "",
+                                          ref_list = list(),
+                                          normalize_gene_length = FALSE,
+                                          variable_genes = "de",
+                                          fine_tune = TRUE,
+                                          reduce_file_size = TRUE,
+                                          do_signatures = FALSE,
+                                          do_main_types = TRUE,
+                                          temp_dir = getwd(), num_cores = 1) {
+  setup_temp_dir(temp_dir, project_name)
+  cell_indices <- split_into_chunks(ncol(counts), n)
 
   for (A in cell_indices) {
-    process_chunk(A, counts, annot, project.name, min.genes, technology,
-                  species, citation, do.signatures, numCores, fine.tune,
-                  temp.dir)
+    process_chunk(A, counts, annot, project_name, min_genes, technology,
+                  species, citation, do_signatures, num_cores, fine_tune,
+                  temp_dir)
   }
 
-  singler_objects <- load_singler_objects(temp.dir, project.name)
+  singler_objects <- load_singler_objects(temp_dir, project_name)
   combine_singler_objects(singler_objects, colnames(counts), clusters, xy)
 }
 
-setup_temp_dir <- function(temp.dir, project.name) {
-  dir.create(file.path(temp.dir, "singler.temp"), showWarnings = FALSE)
+#' Setup Temporary Directory for SingleR Objects
+#'
+#' Creates a temporary directory within the specified path to store SingleR
+#' object chunks.
+#'
+#' @param temp_dir     The base directory to create a temporary directory in.
+#' @param project_name The name of the project, used in naming the temporary
+#'                     directory.
+setup_temp_dir <- function(temp_dir, project_name) {
+  dir.create(file.path(temp_dir, "singler_temp"), showWarnings = FALSE)
 }
 
+#' Split Total Cells into Chunks
+#'
+#' Divides the total number of cells into smaller chunks for processing.
+#'
+#' @param total_cells Total number of cells in the dataset.
+#' @param chunk_size  Desired number of cells in each chunk.
+#'
+#' @return            A list where each element contains cell indices for a
+#'                    chunk.
 split_into_chunks <- function(total_cells, chunk_size) {
   split(seq_len(total_cells), ceiling(seq_len(total_cells) / chunk_size))
 }
 
-process_chunk <- function(cell_indices, counts, annot, project.name, min.genes,
-                          technology, species, citation, do.signatures,
-                          numCores, fine.tune, temp.dir) {
-  singler <- CreateSinglerObject(counts[, cell_indices],
-                                 annot = annot[cell_indices],
-                                 project.name = project.name,
-                                 min.genes = min.genes,
-                                 technology = technology, species = species,
-                                 citation = citation,
-                                 do.signatures = do.signatures,
-                                 clusters = NULL, numCores = numCores,
-                                 fine.tune = fine.tune)
-  save(singler, file = file.path(temp.dir, "singler.temp",
-                                 paste0(project.name, ".",
+#' Process a Chunk of Cells
+#'
+#' Processes a subset of cells to create a SingleR object for that chunk.
+#'
+#' @param cell_indices Indices of cells in the chunk.
+#' @param counts Expression counts matrix.
+#' @param annot Cell annotations.
+#' @param project_name Name of the project.
+#' @param min_genes Minimum number of genes for inclusion.
+#' @param technology Single-cell sequencing technology used.
+#' @param species Species of the samples.
+#' @param citation Citation for the dataset.
+#' @param do_signatures Whether to compute signature scores.
+#' @param num_cores Number of cores to use for computation.
+#' @param fine_tune Whether to fine-tune the SingleR results.
+#' @param temp_dir Temporary directory for storing SingleR objects.
+process_chunk <- function(cell_indices, counts, annot, project_name, min_genes,
+                          technology, species, citation, do_signatures,
+                          num_cores, fine_tune, temp_dir) {
+  singler <- SingleR::CreateSinglerObject(counts[, cell_indices],
+                                          annot = annot[cell_indices],
+                                          project_name = project_name,
+                                          min_genes = min_genes,
+                                          technology = technology,
+                                          species = species,
+                                          citation = citation,
+                                          do_signatures = do_signatures,
+                                          clusters = NULL,
+                                          num_cores = num_cores,
+                                          fine_tune = fine_tune)
+  save(singler, file = file.path(temp_dir, "singler_temp",
+                                 paste0(project_name, ".",
                                         cell_indices[1], ".RData")))
 }
 
-load_singler_objects <- function(temp.dir, project.name) {
-  singler_files <- list.files(file.path(temp.dir, "singler.temp"),
+#' Load SingleR Objects from Files
+#'
+#' Loads SingleR objects saved in temporary files into a list.
+#'
+#' @param temp_dir     Directory where SingleR temporary files are stored.
+#' @param project_name Name of the project, used to identify relevant files.
+#'
+#' @return             A list of SingleR objects.
+load_singler_objects <- function(temp_dir, project_name) {
+  singler_files <- list.files(file.path(temp_dir, "singler_temp"),
                               pattern = "RData", full.names = TRUE)
+
   lapply(singler_files, function(f) {
-    load(f)
-    singler
+    # Load the .RData file
+    loaded_names <- load(f)
+
+    # Assume the object of interest is the last one loaded
+    last_loaded_name <- tail(loaded_names, n = 1)
+
+    # Use get() to retrieve the last loaded object by name
+    get(last_loaded_name, envir = .GlobalEnv)
   })
 }
 
-combine_singler_objects <- function(singler_objects, cell_order, clusters, xy) {
-  SingleR.Combine(singler_objects, order = cell_order,
-                  clusters = clusters, xy = xy)
+
+#' Combine Singler objects into one
+#'
+#' @param singler_objects A list of Singler objects to combine.
+#' @param cell_order      The order of cells to be maintained in the combined
+#'                        object.
+#' @param clusters        Cluster assignments for the cells.
+#' @param xy              Coordinates for the cells, typically used for
+#'                        visualization.
+#'
+#' @return                A combined Singler object.
+combine_singler_objects <- function(singler_objects, cell_order,
+                                    clusters, xy) {
+  SingleR::SingleR.Combine(singler_objects, order = cell_order,
+                           clusters = clusters, xy = xy)
 }
 
 
