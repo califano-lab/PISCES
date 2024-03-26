@@ -80,7 +80,8 @@ gene_heatmap_plot <- function(dat, clust, genes, genes_by_cluster = TRUE,
 
   if (!is.null(annotations$anno_row)) {
     pheatmap_args$annotation_row <- annotations$anno_row
-    pheatmap_args$gaps_row <- (2:length(unique(clust)) - 1) * n_top_genes_per_cluster
+    pheatmap_args$gaps_row <-
+      (2:length(unique(clust)) - 1) * n_top_genes_per_cluster
   }
 
   do.call(pheatmap, pheatmap_args)
@@ -131,7 +132,7 @@ generate_mat_breaks <- function(t) {
   c(lower_breaks, 0, upper_breaks)[-c(1, length(lower_breaks),
                                       length(lower_breaks) + 2,
                                       length(lower_breaks) +
-                                      length(upper_breaks) + 1)]
+                                        length(upper_breaks) + 1)]
 }
 
 
@@ -161,7 +162,7 @@ generate_annotations <- function(df, my_color_palette, genes_by_cluster,
   if (genes_by_cluster) {
     anno_colors$group <- anno_colors$cluster
     anno_row <- data.frame(group = rep(levels(df$cluster),
-                           each = n_top_genes_per_cluster))
+                                       each = n_top_genes_per_cluster))
     return(list(anno_colors = anno_colors, anno_row = anno_row))
   } else {
     return(list(anno_colors = anno_colors, anno_row = NULL))
@@ -169,31 +170,80 @@ generate_annotations <- function(df, my_color_palette, genes_by_cluster,
 }
 
 
-#' Function to select optimal Louvain clustering of single-cell matrix from 100
-#' alternative resolution values. Sub-samples 1000 cells 100 times at each resolution
-#' value to compute mean and standard deviation of silhouette score.
-#' @param mat: matrix with rows as principal component vectors and columns as samples
-#' @param clust: matrix with rows as samples as each column as a clustering vector for a given resolution
-#' outputs list of mean silhouette scores and standard deviations of silhouette scores for each clustering.
+#' Compute silhouette scores for multiple Louvain clusterings
+#'
+#' This function evaluates multiple Louvain clusterings of a single-cell matrix
+#' by computing the silhouette scores for a subsample of the data. It iterates
+#' over 100 alternative resolution values, each time sub-sampling 1000 cells
+#' (or fewer if fewer are available) and calculates the mean and standard
+#' deviation of the silhouette scores for each clustering resolution.
+#'
+#' @param mat   Matrix with rows as principal component vectors and columns as
+#'              samples.
+#' @param clust Matrix with rows as samples and each column as a clustering
+#'              vector for a given resolution.
+#' @return      List containing the means and standard deviations of silhouette
+#'              scores for each clustering resolution.
 sil_subsample <- function(mat, clust) {
-  out <- as.data.frame(matrix(rep(NA, 100 * ncol(clust)), nrow = 100))
-  for (x in 1:100) {
-    i <- sample(1:ncol(mat), min(1000, ncol(mat)))
-    d <- as.dist(1 - cor(mat[, i], method = "pearson"))
-    for (j in 1:ncol(clust)) {
-      if (length(table(clust[i, j])) == 1) {
-        out[x, j] <- 0
-      }
-      if (length(table(clust[i, j])) > 1) {
-        sil <- silhouette(as.numeric(clust[i, j]), d)
-        out[x, j] <- mean(sil[, "sil_width"])
-      }
+  num_resolutions <- ncol(clust)
+  num_subsamples <- 100
+
+  # Initialize output dataframe
+  silhouette_scores <- initialize_silhouette_scores(num_subsamples,
+                                                    num_resolutions)
+
+  for (resolution_index in 1:num_resolutions) {
+    for (subsample_index in 1:num_subsamples) {
+      sampled_indices <- sample_cells(mat, 1000)
+      distance_matrix <- compute_distance_matrix(mat[, sampled_indices])
+      silhouette_scores[subsample_index, resolution_index] <-
+        compute_silhouette_width(clust[sampled_indices, resolution_index],
+                                 distance_matrix)
     }
   }
-  means <- apply(out, 2, mean)
-  sd <- apply(out, 2, sd)
-  return(list(means, sd))
+
+  list(means = colMeans(silhouette_scores, na.rm = TRUE),
+       sd = apply(silhouette_scores, 2, sd, na.rm = TRUE))
 }
+
+#' Initialize matrix for storing silhouette scores
+#'
+#' @param num_subsamples  Number of subsamples to compute.
+#' @param num_resolutions Number of resolution values/clustering vectors.
+#' @return                Initialized matrix for storing silhouette scores.
+initialize_silhouette_scores <- function(num_subsamples, num_resolutions) {
+  matrix(rep(NA, num_subsamples * num_resolutions), nrow = num_subsamples)
+}
+
+#' Randomly sample cells from the matrix
+#'
+#' @param mat       Data matrix.
+#' @param num_cells Number of cells to sample.
+#' @return          Indices of sampled cells.
+sample_cells <- function(mat, num_cells) {
+  sample(seq_len(ncol(mat)), min(num_cells, ncol(mat)))
+}
+
+#' Compute distance matrix using Pearson correlation
+#'
+#' @param mat Subsampled data matrix.
+#' @return Distance matrix.
+compute_distance_matrix <- function(mat) {
+  as.dist(1 - cor(mat, method = "pearson"))
+}
+
+#' Compute the mean silhouette width for a clustering
+#'
+#' @param clustering      Clustering vector for the subsampled cells.
+#' @param distance_matrix Distance matrix for the subsampled cells.
+#' @return                Mean silhouette width for the clustering.
+compute_silhouette_width <- function(clustering, distance_matrix) {
+  if (length(unique(clustering)) <= 1) return(0)
+
+  silhouette_scores <- silhouette(as.numeric(clustering), distance_matrix)
+  mean(silhouette_scores[, "sil_width"])
+}
+
 
 ## bug-fixed version of CreateBigSingleRObject from singleR pipeline.
 # in singleR version the internal function would default to fine.tune=T regardless of input parameter settings
