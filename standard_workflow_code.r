@@ -584,7 +584,7 @@ process_cluster <- function(mat, num_neighbors, cluster_idx, out_dir,
 save_meta_mat <- function(meta_mat, out_dir, file_prefix, subset) {
   file_name <- paste0(out_dir, "/", file_prefix,
                       ifelse(subset, "", "_sub"), ".txt")
-  ARACNeTable(meta_mat, file_name, subset)
+  aracne_table(meta_mat, file_name, subset)
 }
 
 #' Generate Meta Cell Matrix
@@ -781,26 +781,84 @@ log2_transform <- function(cpm_mat) {
   log2(cpm_mat + 1)
 }
 
-#' Saves a matrix in a format for input to ARACNe
+#' Save Data Matrix for ARACNe Analysis
 #'
-#' @param dat.mat Matrix of data (genes X samples).
-#' @param out.file Output file where matrix will be saved.
-#' @param subset Switch for subsetting the matrix to 500 samples. Default TRUE.
-ARACNeTable <- function(dat.mat, out.file, subset = TRUE) {
-  dat.mat <- dat.mat[!duplicated(rownames(dat.mat)), ]
-  saveRDS(dat.mat, file = paste(out.file, ".rds", sep = ""))
-  if (subset) {
-    dat.mat <- dat.mat[, sample(colnames(dat.mat), min(ncol(dat.mat), 500))]
-  }
-  sample.names <- colnames(dat.mat)
-  gene.ids <- rownames(dat.mat)
-  m <- dat.mat
-  mm <- rbind(c("gene", sample.names), cbind(gene.ids, m))
-  write.table(
-    x = mm, file = paste(out.file, ".tsv", sep = ""),
-    sep = "\t", quote = F, row.names = F, col.names = F
-  )
+#' Formats and saves a gene expression matrix for use as input to ARACNe,
+#' optionally subsetting the matrix to a maximum number of samples for
+#' efficiency.
+#'
+#' @param dat_mat  A matrix of data with genes as rows and samples as columns.
+#' @param out_file Path and base name for the output file(s).
+#' @param subset   Logical indicating whether to subset the matrix to 500
+#'                 samples.
+aracne_table <- function(dat_mat, out_file, subset = TRUE) {
+  # Remove duplicate genes
+  dat_mat <- remove_duplicate_genes(dat_mat)
+
+  # Save the full or subsetted matrix as an RDS file
+  save_matrix_rds(dat_mat, out_file, subset)
+
+  # Prepare and save the matrix in TSV format
+  save_matrix_tsv(dat_mat, out_file, subset)
 }
+
+#' Remove Duplicate Genes from the Matrix
+#'
+#' @param dat_mat A matrix with genes as rows and samples as columns.
+#'
+#' @return        Matrix with duplicate genes removed.
+remove_duplicate_genes <- function(dat_mat) {
+  dat_mat[!duplicated(rownames(dat_mat)), ]
+}
+
+#' Save Matrix as RDS File
+#'
+#' @param dat_mat  A matrix with genes as rows and samples as columns.
+#' @param out_file Base path and name for the output RDS file.
+#' @param subset   Logical indicating if the matrix should be subsetted.
+save_matrix_rds <- function(dat_mat, out_file, subset) {
+  if (subset) {
+    dat_mat <- subset_matrix_samples(dat_mat, 500)
+  }
+  saveRDS(dat_mat, file = paste0(out_file, ".rds"))
+}
+
+#' Subset Matrix to a Specific Number of Samples
+#'
+#' @param dat_mat     A matrix with genes as rows and samples as columns.
+#' @param max_samples The maximum number of samples to include in the subset.
+#'
+#' @return            A subsetted matrix.
+subset_matrix_samples <- function(dat_mat, max_samples) {
+  dat_mat[, sample(colnames(dat_mat), min(ncol(dat_mat), max_samples))]
+}
+
+#' Save Matrix as TSV File
+#'
+#' @param dat_mat  A matrix with genes as rows and samples as columns.
+#' @param out_file Base path and name for the output TSV file.
+#' @param subset   Logical indicating if the matrix should be subsetted before
+#'                 saving.
+save_matrix_tsv <- function(dat_mat, out_file, subset) {
+  if (subset) {
+    dat_mat <- subset_matrix_samples(dat_mat, 500)
+  }
+  formatted_matrix <- format_matrix_for_tsv(dat_mat)
+  write.table(formatted_matrix, file = paste0(out_file, ".tsv"),
+              sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+}
+
+#' Format Matrix for Saving as TSV
+#'
+#' @param dat_mat A matrix with genes as rows and samples as columns.
+#'
+#' @return        A matrix formatted for saving as TSV, including header row.
+format_matrix_for_tsv <- function(dat_mat) {
+  sample_names <- colnames(dat_mat)
+  gene_ids <- rownames(dat_mat)
+  rbind(c("gene", sample_names), cbind(gene_ids, dat_mat))
+}
+
 
 #' Processes ARACNe results into a regulon object compatible with VIPER.
 #'
