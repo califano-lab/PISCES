@@ -416,20 +416,42 @@ combine_singler_objects <- function(singler_objects, cell_order,
 }
 
 
-#' Identifies MRs on a cell-by-cell basis and returns a merged, unique list of all such MRs.
+#' Identify and Merge Unique Master Regulators for Each Cell
 #'
-#' @param dat.mat Matrix of protein activity (proteins X samples).
-#' @param numMRs Default number of MRs to identify in each cell. Default of 25.
-#' @return Returns a list of master regulators, the unique, merged set from all cells.
-CBCMRs <- function(dat.mat, numMRs = 25) {
-  # identify MRs
-  cbc.mrs <- apply(dat.mat, 2, function(x) {
-    names(sort(x, decreasing = TRUE))[1:numMRs]
-  })
-  cbc.mrs <- unique(unlist(as.list(cbc.mrs)))
-  # return
-  return(cbc.mrs)
+#' This function computes the top master regulators (MRs) based on protein
+#' activity for each cell in the input dataset. It then merges these lists and
+#' returns a unique set of MRs across all cells.
+#'
+#' @param dat_mat A matrix with proteins as rows and samples (cells) as
+#'                columns.
+#' @param num_mrs Number of top MRs to identify in each cell.
+#'
+#' @return        A vector of unique master regulators identified across all
+#'                cells.
+cbcmrs <- function(dat_mat, num_mrs = 25) {
+  # Identify MRs for each cell and merge into a unique list
+  unique_mrs <- identify_and_merge_mrs(dat_mat, num_mrs)
+  return(unique_mrs)
 }
+
+#' Identify and Merge MRs from Protein Activity Matrix
+#'
+#' This helper function applies over the columns of the protein activity matrix
+#' to identify top MRs for each cell and then merges these lists, ensuring
+#' uniqueness.
+#'
+#' @param dat_mat A matrix with proteins as rows and samples (cells) as
+#'                columns.
+#' @param num_mrs Number of top MRs to identify in each cell.
+#' @return        A vector of unique master regulators identified across all
+#'                cells.
+identify_and_merge_mrs <- function(dat_mat, num_mrs) {
+  cbc_mrs <- apply(dat_mat, 2, function(x) {
+    names(sort(x, decreasing = TRUE))[1:num_mrs]
+  })
+  unique(unlist(cbc_mrs))
+}
+
 
 #' Make Cluster Metacells for ARACNe. Will take a clustering and produce saved meta cell matrices.
 #'
