@@ -915,9 +915,29 @@ prune_regulon <- function(regulon) {
   viper::pruneRegulon(regulon, 50, adaptive = FALSE, eliminate = TRUE)
 }
 
-fishersMethod <- function(x) {
-  return(pchisq(-2 * sum(log(x)), df = 2 * length(x), lower = F))
-} # integrate p-values
+#' Combine P-Values Using Fisher's Method
+#'
+#' This function combines multiple p-values into a single p-value using
+#' Fisher's method. It's useful for meta-analyses where p-values from different
+#' studies or tests need to be integrated.
+#'
+#' @param p_values A numeric vector of p-values to combine.
+#'
+#' @return         A single combined p-value.
+combine_p_values <- function(p_values) {
+  # Calculate the combined chi-squared statistic
+  chi_squared_stat <- -2 * sum(log(p_values))
+
+  # Determine the degrees of freedom for the test
+  degrees_of_freedom <- 2 * length(p_values)
+
+  # Calculate and return the combined p-value
+  combined_p_value <- pchisq(chi_squared_stat, df = degrees_of_freedom,
+                             lower.tail = FALSE)
+
+  return(combined_p_value)
+}
+
 stouffersMethod <- function(x, weights = F) {
   if (weights) {
     return(sum(x * weights) / sqrt(sum(weights * weights)))
