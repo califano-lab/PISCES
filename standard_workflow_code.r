@@ -557,7 +557,7 @@ process_cluster <- function(mat, num_neighbors, cluster_idx, out_dir,
   if (sub_size < ncol(meta_mat)) {
     meta_mat <- meta_mat[, sample(colnames(meta_mat), sub_size)]
   }
-  meta_mat <- CPMTransform(meta_mat)
+  meta_mat <- cpmt_transform(meta_mat)
 
   # Save the subsetted and transformed metacell matrix
   save_meta_mat(meta_mat, out_dir,
@@ -735,17 +735,50 @@ save_cluster_matrix <- function(clust_mat, save_path, save_pref, clust_name) {
   saveRDS(clust_mat, file = file_path)
 }
 
-#' Performs a CPM normalization on the given data.
+#' Perform Counts Per Million (CPM) Normalization
 #'
-#' @param dat.mat Matrix of gene expression data (genes X samples).
-#' @param l2 Optional log2 normalization switch. Default of False.
-#' @return Returns CPM normalized matrix
-CPMTransform <- function(dat.mat, l2 = FALSE) {
-  cpm.mat <- t(t(dat.mat) / (colSums(dat.mat) / 1e6))
+#' This function normalizes gene expression data using Counts Per Million (CPM)
+#' normalization, with an option for subsequent log2 transformation.
+#'
+#' @param dat_mat Matrix of gene expression data, with genes as rows and samples
+#'                as columns.
+#' @param l2      Logical indicating whether to apply log2 transformation after
+#'                CPM normalization.
+#'
+#' @return        A matrix with CPM-normalized (and optionally
+#'                log2-transformed) values.
+cpmt_transform <- function(dat_mat, l2 = FALSE) {
+  # Calculate CPM
+  cpm_mat <- calculate_cpm(dat_mat)
+
+  # Apply log2 transformation if specified
   if (l2) {
-    cpm.mat <- log2(cpm.mat + 1)
+    cpm_mat <- log2_transform(cpm_mat)
   }
-  return(cpm.mat)
+
+  return(cpm_mat)
+}
+
+#' Calculate Counts Per Million (CPM)
+#'
+#' Converts raw counts to CPM for normalization across samples.
+#'
+#' @param dat_mat Raw counts matrix with genes as rows and samples as columns.
+#'
+#' @return        CPM-normalized matrix.
+calculate_cpm <- function(dat_mat) {
+  t(t(dat_mat) / colSums(dat_mat) * 1e6)
+}
+
+#' Apply Log2 Transformation
+#'
+#' Transforms CPM-normalized values using log2, adding 1 to avoid log of zero.
+#'
+#' @param cpm_mat Matrix of CPM-normalized gene expression values.
+#'
+#' @return        Log2-transformed matrix.
+log2_transform <- function(cpm_mat) {
+  log2(cpm_mat + 1)
 }
 
 #' Saves a matrix in a format for input to ARACNe
