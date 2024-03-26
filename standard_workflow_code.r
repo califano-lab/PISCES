@@ -24,12 +24,30 @@ library(ggrepel)
 library(plyr)
 library(PISCES)
 
-# Main function to plot gene heatmap
-geneHeatmap_plot <- function(dat, clust, genes, genes_by_cluster = TRUE, n_top_genes_per_cluster = 5, color_palette = NA, scaled = FALSE) {
+#' Plot a heatmap of custom gene list grouped by cluster
+#'
+#' This function plots a heatmap for a subset of genes, potentially grouped by
+#' cluster. It allows for customization of the color palette, scaling, and
+#' selection of top genes per cluster.
+#'
+#' @param dat                     Matrix with genes as rows and samples as
+#'                                columns.
+#' @param clust                   Vector of cluster labels.
+#' @param genes                   Vector of genes to include in the heatmap.
+#' @param genes_by_cluster        Whether to group genes by cluster identity.
+#' @param n_top_genes_per_cluster Number of top genes per cluster to plot.
+#' @param color_palette           Custom color palette for clusters; uses
+#'                                hue_pal by default.
+#' @param scaled                  Whether the data is already scaled; applies
+#'                                row-wise z-score scaling if FALSE.
+#' @return                        Heatmap plot.
+gene_heatmap_plot <- function(dat, clust, genes, genes_by_cluster = TRUE,
+                              n_top_genes_per_cluster = 5, color_palette = NA,
+                              scaled = FALSE) {
   identities <- levels(clust)
   my_color_palette <- generate_color_palette(identities, color_palette)
 
-  i <- sample(1:ncol(dat), min(10000, ncol(dat)), replace = FALSE)
+  i <- sample(seq_len(ncol(dat)), min(10000, ncol(dat)), replace = FALSE)
   x <- dat[genes, i]
 
   df <- data.frame(cluster = clust[i])
@@ -46,9 +64,19 @@ geneHeatmap_plot <- function(dat, clust, genes, genes_by_cluster = TRUE, n_top_g
   }
 
   mat_breaks <- generate_mat_breaks(t)
-  annotations <- generate_annotations(df, my_color_palette, genes_by_cluster, n_top_genes_per_cluster)
+  annotations <- generate_annotations(df, my_color_palette, genes_by_cluster,
+                                      n_top_genes_per_cluster)
 
-  pheatmap_args <- list(x, cluster_rows = FALSE, show_rownames = TRUE, cluster_cols = FALSE, annotation_col = df, breaks = mat_breaks, color = colorRampPalette(colors = c("blue", "white", "red"))(length(mat_breaks)), fontsize_row = ifelse(genes_by_cluster, 10, 8), show_colnames = FALSE, annotation_colors = annotations$anno_colors)
+  pheatmap_args <- list(x, cluster_rows = FALSE, show_rownames = TRUE,
+                        cluster_cols = FALSE, annotation_col = df,
+                        breaks = mat_breaks,
+                        color = colorRampPalette(c("blue",
+                                                   "white",
+                                                   "red"))
+                        (length(mat_breaks)),
+                        fontsize_row = ifelse(genes_by_cluster, 10, 8),
+                        show_colnames = FALSE,
+                        annotation_colors = annotations$anno_colors)
 
   if (!is.null(annotations$anno_row)) {
     pheatmap_args$annotation_row <- annotations$anno_row
@@ -58,7 +86,15 @@ geneHeatmap_plot <- function(dat, clust, genes, genes_by_cluster = TRUE, n_top_g
   do.call(pheatmap, pheatmap_args)
 }
 
-# Helper function to generate color palette
+#' Generate a color palette
+#'
+#' Generates a color palette based on the provided identities. Defaults to
+#' hue_pal if no custom palette is provided.
+#'
+#' @param identities    Vector of unique identities for which colors are
+#'                      needed.
+#' @param color_palette Optional custom color palette.
+#' @return              A color palette vector.
 generate_color_palette <- function(identities, color_palette) {
   if (is.na(color_palette)) {
     return(hue_pal()(length(identities)))
@@ -67,36 +103,71 @@ generate_color_palette <- function(identities, color_palette) {
   }
 }
 
-# Helper function to calculate row-wise z-score
+#' Calculate row-wise z-score
+#'
+#' Applies z-score normalization across rows of a matrix.
+#'
+#' @param x A numeric matrix.
+#' @return  Matrix with row-wise z-scores.
 calculate_z_score <- function(x) {
   return((x - mean(x)) / sd(x))
 }
 
-# Helper function to generate matrix breaks based on quantiles
+#' Generate matrix breaks based on quantiles
+#'
+#' Determines breaks for the heatmap color scale based on quantiles, excluding
+#' extreme values.
+#'
+#' @param t Numeric matrix for which to determine breaks.
+#' @return  Vector of breaks for the heatmap color scale.
 generate_mat_breaks <- function(t) {
   quantile_breaks <- function(xs, n = 10) {
-    breaks <- quantile(xs, probs = seq(0, 1, length.out = n))
+    breaks <- quantile(xs, probs = seq(0, 1, length.out = n + 1))
     breaks[!duplicated(breaks)]
   }
 
   lower_breaks <- quantile_breaks(t[t < 0], n = 10)
   upper_breaks <- quantile_breaks(t[t > 0], n = 10)
-  c(lower_breaks, 0, upper_breaks)[-c(1, length(lower_breaks), length(lower_breaks) + 2, length(lower_breaks) + length(upper_breaks) + 1)]
+  c(lower_breaks, 0, upper_breaks)[-c(1, length(lower_breaks),
+                                      length(lower_breaks) + 2,
+                                      length(lower_breaks) +
+                                      length(upper_breaks) + 1)]
 }
 
-# Helper function to generate annotations
-generate_annotations <- function(df, my_color_palette, genes_by_cluster, n_top_genes_per_cluster) {
+
+#' Generate annotations for heatmap
+#'
+#' Creates a list containing colors for cluster annotations and an optional
+#' data frame for row annotations if genes are grouped by cluster. The colors
+#' are matched to clusters, and if genes are grouped by cluster, each gene
+#' group is annotated with its corresponding cluster.
+#'
+#' @param df                      Data frame containing cluster information for
+#'                                columns in the heatmap.
+#' @param my_color_palette        Vector of colors used for cluster
+#'                                annotations.
+#' @param genes_by_cluster        Boolean indicating whether genes should be
+#'                                grouped by their cluster.
+#' @param n_top_genes_per_cluster Number of top genes per cluster to include if
+#'                                genes are grouped by cluster.
+#' @return                        A list containing 'anno_colors' for column
+#'                                annotations and 'anno_row' for row
+#'                                annotations (if applicable).
+generate_annotations <- function(df, my_color_palette, genes_by_cluster,
+                                 n_top_genes_per_cluster) {
   anno_colors <- list(cluster = my_color_palette)
   names(anno_colors$cluster) <- levels(df$cluster)
 
   if (genes_by_cluster) {
     anno_colors$group <- anno_colors$cluster
-    anno_row <- data.frame(group = rep(levels(df$cluster), each = n_top_genes_per_cluster))
+    anno_row <- data.frame(group = rep(levels(df$cluster),
+                           each = n_top_genes_per_cluster))
     return(list(anno_colors = anno_colors, anno_row = anno_row))
   } else {
     return(list(anno_colors = anno_colors, anno_row = NULL))
   }
 }
+
 
 #' Function to select optimal Louvain clustering of single-cell matrix from 100
 #' alternative resolution values. Sub-samples 1000 cells 100 times at each resolution
