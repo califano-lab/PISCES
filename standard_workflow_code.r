@@ -343,18 +343,18 @@ split_into_chunks <- function(total_cells, chunk_size) {
 #'
 #' Processes a subset of cells to create a SingleR object for that chunk.
 #'
-#' @param cell_indices Indices of cells in the chunk.
-#' @param counts Expression counts matrix.
-#' @param annot Cell annotations.
-#' @param project_name Name of the project.
-#' @param min_genes Minimum number of genes for inclusion.
-#' @param technology Single-cell sequencing technology used.
-#' @param species Species of the samples.
-#' @param citation Citation for the dataset.
+#' @param cell_indices  Indices of cells in the chunk.
+#' @param counts        Expression counts matrix.
+#' @param annot         Cell annotations.
+#' @param project_name  Name of the project.
+#' @param min_genes     Minimum number of genes for inclusion.
+#' @param technology    Single-cell sequencing technology used.
+#' @param species       Species of the samples.
+#' @param citation      Citation for the dataset.
 #' @param do_signatures Whether to compute signature scores.
-#' @param num_cores Number of cores to use for computation.
-#' @param fine_tune Whether to fine-tune the SingleR results.
-#' @param temp_dir Temporary directory for storing SingleR objects.
+#' @param num_cores     Number of cores to use for computation.
+#' @param fine_tune     Whether to fine-tune the SingleR results.
+#' @param temp_dir      Temporary directory for storing SingleR objects.
 process_chunk <- function(cell_indices, counts, annot, project_name, min_genes,
                           technology, species, citation, do_signatures,
                           num_cores, fine_tune, temp_dir) {
@@ -938,15 +938,57 @@ combine_p_values <- function(p_values) {
   return(combined_p_value)
 }
 
-stouffersMethod <- function(x, weights = F) {
-  if (weights) {
-    return(sum(x * weights) / sqrt(sum(weights * weights)))
+#' Combine Z-Scores Using Stouffer's Method
+#'
+#' This function combines multiple z-scores into a single z-score using
+#' Stouffer's method. Optionally, it can weight the z-scores before combining
+#' them.
+#'
+#' @param z_scores A numeric vector of z-scores to combine.
+#' @param weights  Optional numeric vector of weights for each z-score;
+#'                 defaults to equal weighting.
+#'
+#' @return         A single combined z-score.
+combine_z_scores <- function(z_scores, weights = NULL) {
+  # Check if weights are provided and normalize them
+  if (!is.null(weights)) {
+    # Ensure weights are normalized
+    normalized_weights <- normalize_weights(weights)
+    # Calculate weighted sum of z-scores
+    weighted_sum <- weighted_sum_z_scores(z_scores, normalized_weights)
+    # Calculate combined z-score with weights
+    combined_z_score <- weighted_sum / sqrt(sum(normalized_weights ^ 2))
   } else {
-    return(sum(x) / sqrt(length(x)))
+    # Calculate combined z-score without weights
+    combined_z_score <- sum(z_scores) / sqrt(length(z_scores))
   }
-} # integrate z-scores
 
+  return(combined_z_score)
+}
 
+#' Normalize Weights
+#'
+#' Normalizes a given vector of weights.
+#'
+#' @param weights A numeric vector of weights.
+#'
+#' @return A numeric vector of normalized weights.
+normalize_weights <- function(weights) {
+  weights / sum(weights)
+}
+
+#' Calculate Weighted Sum of Z-Scores
+#'
+#' Calculates the weighted sum of z-scores given z-scores and their
+#' corresponding weights.
+#'
+#' @param z_scores A numeric vector of z-scores.
+#' @param weights  A numeric vector of weights for each z-score.
+#'
+#' @return         Weighted sum of the z-scores.
+weighted_sum_z_scores <- function(z_scores, weights) {
+  sum(z_scores * weights)
+}
 
 ##### load raw data
 neoredp1 <- Read10X(data.dir = "/Users/aleksandar/genomecenter.columbia.edu/victor_nygc_samples/neo-RED-P-C001-HIMC-CD45pos-GEX/outs/filtered_feature_bc_matrix/")
