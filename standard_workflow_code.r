@@ -1270,18 +1270,18 @@ neoredp54$tissue <- "Total"
 
 neoredp_list <- list(neoredp2, neoredp4, neoredp8, neoredp12, neoredp14, neoredp16, neoredp18, neoredp20, neoredp23, neoredp26, neoredp28, neoredp30, neoredp32, neoredp34, neoredp36, neoredp37, neoredp38, neoredp39, neoredp45, neoredp46, neoredp47, neoredp49, neoredp50, neoredp51, neoredp52, neoredp53, neoredp54)
 rm(neoredp1, neoredp2, neoredp3, neoredp4, neoredp5, neoredp6, neoredp7, neoredp8, neoredp9, neoredp10, neoredp11, neoredp12, neoredp13, neoredp14, neoredp15, neoredp16, neoredp17, neoredp18, neoredp19, neoredp20, neoredp21, neoredp22, neoredp23, neoredp24, neoredp25, neoredp26, neoredp27, neoredp28, neoredp29, neoredp30, neoredp31, neoredp32, neoredp33, neoredp34, neoredp35, neoredp36, neoredp37, neoredp38, neoredp39, neoredp40, neoredp41, neoredp42, neoredp43, neoredp44, neoredp45, neoredp46, neoredp47, neoredp48, neoredp49, neoredp50, neoredp51, neoredp52, neoredp53, neoredp54)
-for (i in 1:length(neoredp_list)) {
+for (i in seq_along(neoredp_list)) {
   p <- neoredp_list[[i]]
   p <- PercentageFeatureSet(p, pattern = "^MT-", col.name = "percent.mt")
   p <- subset(p, subset = percent.mt < 25 & nCount_RNA > 1500 & nCount_RNA < 10000) # >1000, <10000
-  p <- SCTransform(p, vars.to.regress = c("nCount_RNA", "percent.mt"), return.only.var.genes = F, verbose = T, conserve.memory = T)
+  p <- SCTransform(p, vars.to.regress = c("nCount_RNA", "percent.mt"), return.only.var.genes = FALSE, verbose = TRUE, conserve.memory = TRUE)
   p.singler <- CreateSinglerObject(p[["SCT"]]@counts,
     annot = NULL,
     project.name = "primecut", min.genes = 0,
     technology = "10X", species = "Human", citation = "",
-    do.signatures = F, clusters = NULL, numCores = numCores,
-    fine.tune = F, temp.dir = "/Users/aleksandar/Downloads",
-    variable.genes = "de", reduce.file.size = T, do.main.types = T
+    do.signatures = FALSE, clusters = NULL, numCores = numCores,
+    fine.tune = FALSE, temp.dir = "/Users/aleksandar/Downloads",
+    variable.genes = "de", reduce.file.size = TRUE, do.main.types = TRUE
   )
   p$hpca_labels <- p.singler$singler[[1]][[1]][[2]]
   p$hpca_main_labels <- p.singler$singler[[1]][[4]][[2]]
@@ -1293,6 +1293,7 @@ for (i in 1:length(neoredp_list)) {
   p$blueprint_main_pvals <- p.singler$singler[[2]][[4]][[3]]
   neoredp_list[[i]] <- p
 }
+
 lapply(neoredp_list, ncol)
 neoredp_list <- neoredp_list[which(lapply(neoredp_list, ncol) > 500)]
 lapply(neoredp_list, ncol)
