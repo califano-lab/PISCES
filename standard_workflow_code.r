@@ -443,6 +443,7 @@ cbcmrs <- function(dat_mat, num_mrs = 25) {
 #' @param dat_mat A matrix with proteins as rows and samples (cells) as
 #'                columns.
 #' @param num_mrs Number of top MRs to identify in each cell.
+#'
 #' @return        A vector of unique master regulators identified across all
 #'                cells.
 identify_and_merge_mrs <- function(dat_mat, num_mrs) {
@@ -452,81 +453,231 @@ identify_and_merge_mrs <- function(dat_mat, num_mrs) {
   unique(unlist(cbc_mrs))
 }
 
-
-#' Make Cluster Metacells for ARACNe. Will take a clustering and produce saved meta cell matrices.
+#' Generate Metacell Matrices for ARACNe Analysis
 #'
-#' @param dat.mat Matrix of raw gene expression (genes X samples).
-#' @param dist.mat Distance matrix to be used for neighbor calculation. We recommend using a viper similarity matrix.
-#' @param numNeighbors Number of neighbors to use for each meta cell. Default of 5.
-#' @param clustering Vector of cluster labels.
-#' @param subSize Size to subset the data too. Since 200 cells is adequate for ARACNe runs, this allows for speedup. Default of 200.
-#' @param out.dir Directory for sub matrices to be saved in.
-#' @param out.name Optional argument for preface of file names.
-MakeCMfA <- function(dat.mat, numNeighbors = 10, clustering, subSize = 200, out.dir, out.name = "", sizeThresh = 100) {
-  # generate cluster matrices
-  clust.mats <- ClusterMatrices(dat.mat, clustering, sizeThresh = sizeThresh)
-  clust.mats <- clust.mats[which(!unlist(lapply(clust.mats, is.null)))]
-  # produce metaCell matrix and save for each cluster matrix
-  k <- length(clust.mats)
-  meta.mats <- list()
-  for (i in 1:k) {
-    mat <- clust.mats[[i]]
-    meta.mat <- MetaCells(mat, numNeighbors)
-    file.name <- paste(out.dir, out.name, "_clust-", i, "-metaCells_all", sep = "")
-    ARACNeTable(meta.mat, file.name, subset = FALSE)
-    meta.mats[[i]] <- meta.mat
-    if (subSize < ncol(meta.mat)) {
-      meta.mat <- meta.mat[, sample(colnames(meta.mat), subSize)]
-    }
-    meta.mat <- CPMTransform(meta.mat)
-    file.name <- paste(out.dir, out.name, "_clust-", i, "-metaCells", sep = "")
-    ARACNeTable(meta.mat, file.name, subset = FALSE)
+#' This function takes a gene expression matrix and its corresponding
+#' clustering, generates metacell matrices for each cluster, and saves these
+#' matrices. It is designed for use with ARACNe to facilitate analysis of gene
+#' regulatory networks.
+#'
+#' @param dat_mat       Matrix of raw gene expression (genes X samples).
+#' @param num_neighbors Number of neighbors to use for each metacell.
+#' @param clustering    Vector of cluster labels for each sample in `dat_mat`.
+#' @param sub_size      Target number of cells in each metacell for ARACNe
+#'                      analysis.
+#' @param out_dir       Directory where metacell matrices will be saved.
+#' @param out_name      Prefix for saved metacell matrix files.
+#' @param size_thresh   Minimum cluster size; clusters smaller than this will
+#'                      be ignored.
+#'
+#' @return              A list of metacell matrices, one per cluster.
+make_cmfa <- function(dat_mat, clustering, num_neighbors = 10, sub_size = 200,
+                      out_dir, out_name = "", size_thresh = 100) {
+  # Generate cluster-specific matrices and filter out empty ones
+  clust_mats <- generate_cluster_matrices(dat_mat, clustering, size_thresh)
+  clust_mats <- filter_non_empty_matrices(clust_mats)
+
+  # Initialize list to store metacell matrices
+  meta_mats <- list()
+
+  for (i in seq_along(clust_mats)) {
+    # Generate and save metacell matrix for each cluster
+    meta_mat <- process_cluster(clust_mats[[i]], num_neighbors, i, out_dir,
+                                out_name, sub_size)
+    meta_mats[[i]] <- meta_mat
   }
-  return(meta.mats)
+
+  return(meta_mats)
 }
 
-#' Generates a meta cell matrix for given data.
+#' Generate Cluster-Specific Matrices
 #'
-#' @param dat.mat Raw gene expression matrix (genes X samples).
-#' @param dist.mat Distance matrix to be used for neighbor inference.
-#' @param numNeighbors Number of neighbors to use for each meta cell. Default of 10.
-#' @param subSize If specified, number of metaCells to be subset from the final matrix. No subsetting occurs if not incldued.
-#' @return A matrix of meta cells (genes X samples).
-MetaCells <- function(dat.mat, numNeighbors = 10, subSize) {
-  # prune distance matrix if necessary
-  # dist.mat <- as.matrix(dist.mat)
-  # dist.mat <- dist.mat[colnames(dat.mat), colnames(dat.mat)]
-  # dist.mat <- as.dist(dist.mat)
-  dist.mat <- as.dist(1 - cor(dat.mat, method = "pearson"))
-  # KNN function
-  KNN <- function(dist.mat, k) {
-    dist.mat <- as.matrix(dist.mat)
-    n <- nrow(dist.mat)
-    neighbor.mat <- matrix(0L, nrow = n, ncol = k)
-    for (i in 1:n) {
-      neighbor.mat[i, ] <- order(dist.mat[i, ])[2:(k + 1)]
-    }
-    return(neighbor.mat)
-  }
-  knn.neighbors <- KNN(dist.mat, numNeighbors)
-  # create imputed matrix
-  imp.mat <- matrix(0, nrow = nrow(dat.mat), ncol = ncol(dat.mat))
-  rownames(imp.mat) <- rownames(dat.mat)
-  colnames(imp.mat) <- colnames(dat.mat)
-  for (i in 1:ncol(dat.mat)) {
-    neighbor.mat <- dat.mat[, c(i, knn.neighbors[i, ])]
-    imp.mat[, i] <- rowSums(neighbor.mat)
-  }
-  # subset if requested and return
-  if (missing(subSize)) {
-    return(imp.mat)
-  } else if (subSize > ncol(imp.mat)) {
-    return(imp.mat)
-  } else {
-    return(imp.mat[, sample(colnames(imp.mat), subSize)])
-  }
+#' This function divides a gene expression matrix into sub-matrices based on
+#' cluster labels, ensuring each sub-matrix contains only the data for a
+#' specific cluster. Clusters with a size below the specified threshold are
+#' ignored.
+#'
+#' @param dat_mat     Matrix of raw gene expression data, with genes as rows
+#'                    and samples as columns.
+#' @param clustering  A vector of cluster labels corresponding to each column
+#'                    in `dat_mat`.
+#' @param size_thresh Minimum size of clusters to be considered. Clusters
+#'                    smaller than this threshold will be ignored.
+#'
+#' @return            A list of matrices, each representing gene expression
+#'                    data for a specific cluster.
+generate_cluster_matrices <- function(dat_mat, clustering, size_thresh) {
+  ClusterMatrices(dat_mat, clustering, size_thresh = size_thresh)
 }
 
+#' Filter Out Empty Cluster Matrices
+#'
+#' Removes any null entries from a list of matrices. This is typically used to
+#' exclude cluster-specific matrices that might have been deemed too small or
+#' otherwise invalid.
+#'
+#' @param clust_mats A list of matrices, where each matrix corresponds to a
+#'                   cluster's gene expression data.
+#'
+#' @return           A filtered list of matrices, with null entries removed.
+filter_non_empty_matrices <- function(clust_mats) {
+  clust_mats[which(!unlist(lapply(clust_mats, is.null)))]
+}
+
+#' Process Each Cluster to Generate Metacell Matrix
+#'
+#' For a given cluster's gene expression matrix, this function generates a
+#' metacell matrix by considering the specified number of neighbors. It saves
+#' two versions of the metacell matrix: one with all cells and another with a
+#' subset (if the original exceeds the `sub_size`). Both matrices are saved to
+#' files.
+#'
+#' @param mat           A matrix representing the gene expression data for a
+#'                      single cluster.
+#' @param num_neighbors The number of neighbors to consider for each metacell.
+#' @param cluster_idx   The index of the current cluster being processed.
+#' @param out_dir       The directory where output files will be saved.
+#' @param out_name      A prefix to be added to the names of the output files.
+#' @param sub_size      The maximum number of cells to include in the subsetted
+#'                      metacell matrix.
+#'
+#' @return              A metacell matrix for the cluster, potentially
+#'                      subsetted and transformed.
+process_cluster <- function(mat, num_neighbors, cluster_idx, out_dir,
+                            out_name, sub_size) {
+  # Generate metacell matrix
+  meta_mat <- MetaCells(mat, num_neighbors)
+
+  # Save the complete metacell matrix
+  save_meta_mat(meta_mat, out_dir,
+                paste0(out_name, "_clust-", cluster_idx, "-metaCells_all"),
+                subset = FALSE)
+
+  # Subset if necessary and apply CPM transformation
+  if (sub_size < ncol(meta_mat)) {
+    meta_mat <- meta_mat[, sample(colnames(meta_mat), sub_size)]
+  }
+  meta_mat <- CPMTransform(meta_mat)
+
+  # Save the subsetted and transformed metacell matrix
+  save_meta_mat(meta_mat, out_dir,
+                paste0(out_name, "_clust-", cluster_idx, "-metaCells"),
+                subset = TRUE)
+
+  return(meta_mat)
+}
+
+#' Save Metacell Matrix to File
+#'
+#' Saves a given metacell matrix to a file, constructing the file name from the
+#' provided directory, file prefix, and an indicator of whether the matrix has
+#' been subsetted.
+#'
+#' @param meta_mat    The metacell matrix to be saved.
+#' @param out_dir     The directory where the file will be saved.
+#' @param file_prefix The prefix to be used in constructing the file name.
+#' @param subset      A boolean flag indicating whether the matrix is a
+#'                    subsetted version.
+#'
+#' @return            None; the function's primary effect is to write a file
+#'                    to disk.
+save_meta_mat <- function(meta_mat, out_dir, file_prefix, subset) {
+  file_name <- paste0(out_dir, "/", file_prefix,
+                      ifelse(subset, "", "_sub"), ".txt")
+  ARACNeTable(meta_mat, file_name, subset)
+}
+
+#' Generate Meta Cell Matrix
+#'
+#' Creates a meta cell matrix by aggregating information from each cell's
+#' nearest neighbors. This can be useful for imputing missing values or
+#' enhancing signal in sparse datasets.
+#'
+#' @param dat_mat       A matrix of raw gene expression data (genes x samples).
+#' @param num_neighbors The number of nearest neighbors to consider for each
+#'                      cell.
+#' @param sub_size      Optional; if specified, subsets the resulting meta cell
+#'                      matrix to this number of cells.
+#'
+#' @return              A matrix representing meta cells, potentially
+#'                      subsetted.
+meta_cells <- function(dat_mat, num_neighbors = 10, sub_size = NA) {
+  # Compute distance matrix based on Pearson correlation
+  dist_mat <- compute_distance_matrix(dat_mat)
+
+  # Identify nearest neighbors for each sample
+  knn_neighbors <- find_knn(dist_mat, num_neighbors)
+
+  # Create imputed matrix based on nearest neighbors
+  imp_mat <- impute_matrix(dat_mat, knn_neighbors)
+
+  # Subset the imputed matrix if sub_size is specified and valid
+  if (!is.na(sub_size) && sub_size > 0 && sub_size <= ncol(imp_mat)) {
+    imp_mat <- subset_matrix(imp_mat, sub_size)
+  }
+
+  return(imp_mat)
+}
+
+#' Compute Distance Matrix
+#'
+#' Calculates a distance matrix using Pearson correlation.
+#'
+#' @param dat_mat A matrix of gene expression data (genes x samples).
+#'
+#' @return        A distance matrix.
+compute_distance_matrix <- function(dat_mat) {
+  as.dist(1 - cor(dat_mat, method = "pearson"))
+}
+
+#' Find K-Nearest Neighbors
+#'
+#' Identifies the k-nearest neighbors for each sample based on the distance
+#' matrix.
+#'
+#' @param dist_mat A distance matrix.
+#' @param k        The number of neighbors to identify.
+#'
+#' @return         A matrix indicating the indices of k-nearest neighbors for
+#'                 each sample.
+find_knn <- function(dist_mat, k) {
+  apply(as.matrix(dist_mat), 1, function(x) order(x)[2:(k + 1)])
+}
+
+#' Impute Matrix
+#'
+#' Creates an imputed matrix by aggregating the expression of each sample with
+#' its k-nearest neighbors.
+#'
+#' @param dat_mat       A matrix of gene expression data (genes x samples).
+#' @param knn_neighbors A matrix of k-nearest neighbor indices for each sample.
+#'
+#' @return              An imputed gene expression matrix.
+impute_matrix <- function(dat_mat, knn_neighbors) {
+  imp_mat <- matrix(0, nrow = nrow(dat_mat), ncol = ncol(dat_mat))
+  colnames(imp_mat) <- colnames(dat_mat)
+  rownames(imp_mat) <- rownames(dat_mat)
+
+  for (i in seq_len(ncol(dat_mat))) {
+    neighbor_cols <- c(i, knn_neighbors[i, ])
+    imp_mat[, i] <- rowSums(dat_mat[, neighbor_cols, drop = FALSE])
+  }
+
+  imp_mat
+}
+
+#' Subset Matrix
+#'
+#' Subsets a matrix to a specified number of columns (samples), chosen
+#' randomly.
+#'
+#' @param mat      A matrix to be subsetted.
+#' @param sub_size The number of columns to retain in the subset.
+#'
+#' @return         A subsetted matrix.
+subset_matrix <- function(mat, sub_size) {
+  mat[, sample(ncol(mat), sub_size)]
+}
 
 #' Generates cluster-specific matrices for given data based on a clustering object.
 #'
