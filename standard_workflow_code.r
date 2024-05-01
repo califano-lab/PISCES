@@ -1007,26 +1007,32 @@ patient_data_list <- list()
 
 for (patient_id in patients) {
   # Dynamically generate names based on patient ID
-  analysis_name <- paste("240307_JOEL_DAVID_4_HUMAN_10X-",
-                         patient_id, "-cellranger-count-default", sep = "")
+  analysis_name <- paste("240307_JOEL_DAVID_4_HUMAN_10X-", patient_id,
+                         "-cellranger-count-default", sep = "")
   output_folder_name <- paste(patient_id, "cellranger_count_outs", sep = "_")
 
   # Construct the full path to the filtered feature matrix directory
-  data_dir <- file.path(base_path,
-                        patient_id,
-                        "analysis",
-                        analysis_name,
-                        output_folder_name,
-                        "filtered_feature_bc_matrix")
+  data_dir <- file.path(base_path, patient_id, "analysis", analysis_name,
+                        output_folder_name, "filtered_feature_bc_matrix")
 
   # Read the data
   data <- Read10X(data.dir = data_dir)
 
   # Create a Seurat object
-  seurat_object <- CreateSeuratObject(counts = data,
-                                      min.features = 200,
+  seurat_object <- CreateSeuratObject(counts = data, min.features = 200,
                                       min.cells = 50)
+  seurat_object <- RenameCells(seurat_object, add.cell.id = patient_id)
   seurat_object$patient <- patient_id
+
+  # Calculate the percentage of mitochondrial genes
+  # Ensure mitochondrial genes are correctly identified with your dataset's
+  # naming convention
+  mitochondrial_genes <-
+    grep("^MT-",
+         rownames(GetAssayData(seurat_object, assay = "RNA", slot = "counts")),
+         value = TRUE)
+  seurat_object[["percent.mt"]] <-
+    PercentageFeatureSet(seurat_object, features = mitochondrial_genes)
 
   # Append to the list
   patient_data_list[[patient_id]] <- seurat_object
@@ -1036,59 +1042,33 @@ for (patient_id in patients) {
 # Step 2: Data Integration and Batch Correction
 # ========================================================
 
-# Normalize data for each dataset
-for (i in names(patient_data_list)) {
-  patient_data_list[[i]] <- NormalizeData(patient_data_list[[i]],
-                                          verbose = FALSE)
-  patient_data_list[[i]] <- FindVariableFeatures(patient_data_list[[i]],
-                                                 selection.method = "vst",
-                                                 nfeatures = 2000)
-  patient_data_list[[i]] <- ScaleData(patient_data_list[[i]], verbose = FALSE)
-  patient_data_list[[i]] <-
-    RunPCA(patient_data_list[[i]],
-           features = VariableFeatures(object = patient_data_list[[i]]),
-           verbose = TRUE)
-}
+# Normalize and stabilize variance using SCTransform
+patient_data_list <- lapply(patient_data_list, function(x) {
+  x <- SCTransform(x, verbose = FALSE)
+  return(x)
+})
 
-# Find common features to ensure consistency across datasets
-common_features <-
-  Reduce(intersect,
-         lapply(patient_data_list, function(x) rownames(x[["RNA"]])))
-for (i in names(patient_data_list)) {
-  DefaultAssay(patient_data_list[[i]]) <- "RNA"
-  patient_data_list[[i]] <- subset(patient_data_list[[i]],
-                                   features = common_features)
-}
-
-# Ensure each data matrix has proper dimension names
-for (i in names(patient_data_list)) {
-  seurat_object <- patient_data_list[[i]]
-  # Update dimension names if necessary
-  if (is.null(dimnames(seurat_object))) {
-    rownames(seurat_object) <- rownames(seurat_object@assays$RNA@counts)
-    colnames(seurat_object) <- colnames(seurat_object@assays$RNA@counts)
-    patient_data_list[[i]] <- seurat_object
-  }
-  patient_data_list[[i]] <- RenameCells(patient_data_list[[i]],
-                                        add.cell.id = i)
-}
+# Prepare for integration
+patient_data_list <-
+  PrepSCTIntegration(object.list = patient_data_list, verbose = TRUE)
 
 # Identify integration anchors using only the common features
 features_to_integrate <-
-  SelectIntegrationFeatures(object.list = patient_data_list,
-                            features = common_features)
+  SelectIntegrationFeatures(object.list = patient_data_list, nfeatures = 2000)
 anchors <-
   FindIntegrationAnchors(object.list = patient_data_list,
                          anchor.features = features_to_integrate,
                          dims = 1:20,
+                         normalization.method = "SCT",
                          verbose = TRUE)
 
 # Integrate data using the identified anchors
-integrated_data <- IntegrateData(anchorset = anchors, dims = 1:20,
-                                 verbose = TRUE)
+integrated_data <-
+  IntegrateData(anchorset = anchors, normalization.method = "SCT",
+                dims = 1:20, verbose = TRUE)
 
-# Running PCA on the integrated data to enable visualization and further
-# analysis
+# Running PCA on the integrated data to enable visualization and
+# further analysis
 integrated_data <- RunPCA(integrated_data, verbose = TRUE)
 
 # Generate a UMAP reduction for visualization
