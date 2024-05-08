@@ -37,50 +37,67 @@ library(plyr)
 #'
 #' @return                        Heatmap plot.
 gene_heatmap_plot <- function(dat, clust, genes, genes_by_cluster = TRUE,
-                              n_top_genes_per_cluster = 5, color_palette = NA,
+                              n_top_genes_per_cluster = 5, color_palette = NULL,
                               scaled = FALSE) {
-  identities <- levels(clust)
+  if (length(unique(clust)) == 0) {
+    stop("No valid cluster data found.")
+  }
+  identities <- levels(factor(clust))  # Ensure clust is treated as a factor
+
+  # Prepare color palette
   my_color_palette <- generate_color_palette(identities, color_palette)
 
+  # Subset data for heatmap
   i <- sample(seq_len(ncol(dat)), min(10000, ncol(dat)), replace = FALSE)
   x <- dat[genes, i]
 
+  # Prepare cluster data frame
   df <- data.frame(cluster = clust[i])
   rownames(df) <- colnames(x)
-
   o <- order(df$cluster)
   x <- x[, o]
   df <- df[o, , drop = FALSE]
 
+  # Apply scaling if needed
   if (!scaled) {
     t <- apply(x, 1, calculate_z_score)
   } else {
     t <- x
   }
 
+  # Generate breaks and annotations
   mat_breaks <- generate_mat_breaks(t)
   annotations <- generate_annotations(df, my_color_palette, genes_by_cluster,
                                       n_top_genes_per_cluster)
 
-  pheatmap_args <- list(x, cluster_rows = FALSE, show_rownames = TRUE,
+  # Inside gene_heatmap_plot, ensure no mismatch in dimensions
+  if (nrow(x) != length(genes)) {
+    stop("Blah: Mismatch in expected rows and data dimensions. Check gene and cluster counts.")
+  }
+
+  # Validate gaps
+  expected_rows <- length(identities) * n_top_genes_per_cluster
+  if (nrow(t) != expected_rows) {
+    stop("Mismatch in expected rows and data dimensions. Check gene and cluster counts.")
+  }
+
+  # Configure pheatmap arguments
+  pheatmap_args <- list(t, cluster_rows = FALSE, show_rownames = TRUE,
                         cluster_cols = FALSE, annotation_col = df,
                         breaks = mat_breaks,
-                        color = colorRampPalette(c("blue",
-                                                   "white",
-                                                   "red"))
-                        (length(mat_breaks)),
+                        color = colorRampPalette(c("blue", "white", "red"))(length(mat_breaks)),
                         fontsize_row = ifelse(genes_by_cluster, 10, 8),
                         show_colnames = FALSE,
                         annotation_colors = annotations$anno_colors)
 
   if (!is.null(annotations$anno_row)) {
     pheatmap_args$annotation_row <- annotations$anno_row
-    pheatmap_args$gaps_row <-
-      (2:length(unique(clust)) - 1) * n_top_genes_per_cluster
+    pheatmap_args$gaps_row <- (2:length(unique(clust)) - 1) * n_top_genes_per_cluster
   }
 
   do.call(pheatmap, pheatmap_args)
 }
+
 
 #' Generate a color palette
 #'
@@ -92,13 +109,19 @@ gene_heatmap_plot <- function(dat, clust, genes, genes_by_cluster = TRUE,
 #' @param color_palette Optional custom color palette.
 #'
 #' @return              A color palette vector.
-generate_color_palette <- function(identities, color_palette) {
-  if (is.na(color_palette)) {
-    return(hue_pal()(length(identities)))
+generate_color_palette <- function(identities, color_palette = NULL) {
+  if (is.null(color_palette)) {
+    if (length(identities) > 0) {
+      return(hue_pal()(length(identities)))
+    } else {
+      warning("No identities provided, returning empty color palette.")
+      return(character(0))  # Return an empty character vector if no identities
+    }
   } else {
     return(color_palette)
   }
 }
+
 
 #' Calculate row-wise z-score
 #'
@@ -1125,6 +1148,12 @@ weighted_sum_z_scores <- function(z_scores, weights) {
 # Define base path where the directories are located
 base_path <- "/Users/apple/Desktop/240307_JOEL_DAVID_6_HUMAN_10X"
 base_output_path <- "/Users/apple/Desktop/output"
+plot_output_path <- file.path(base_output_path, "plots")
+
+# Create the directory if it does not exist
+if (!dir.exists(plot_output_path)) {
+  dir.create(plot_output_path, recursive = TRUE)
+}
 
 # Define a list of transcription factors relevant to colorectal cancer
 transcription_factors <- c("APC", "TP53", "KRAS", "PIK3CA", "SMAD4")
@@ -1212,8 +1241,6 @@ lapply(names(patient_data_list), function(patient_id) {
   }
 })
 
-
-
 # Prepare for integration
 patient_data_list <-
   PrepSCTIntegration(object.list = patient_data_list, verbose = TRUE)
@@ -1240,10 +1267,17 @@ integrated_data <- RunPCA(integrated_data, verbose = TRUE)
 # Generate a UMAP reduction for visualization
 integrated_data <- RunUMAP(integrated_data, reduction = "pca", dims = 1:20)
 
-# Plot UMAP to visualize the integration results
-DimPlot(integrated_data, reduction = "umap", label = TRUE)
+p <- DimPlot(integrated_data, reduction = "umap", group.by = "patient", label = TRUE) +
+  ggtitle("UMAP Visualization of Integrated Single-cell Data") +
+  scale_color_viridis_d() +  # This adds a color scale, replace 'patient' with appropriate metadata column name
+  theme(legend.position = "right")  # Adjust legend position
 
-##############################
+# Define the path and filename for the UMAP plot
+umap_plot_path <- file.path(plot_output_path, "umap_integration_results.png")
+
+# Save the UMAP plot
+ggsave(umap_plot_path, plot = p, width = 10, height = 8)
+cat("UMAP plot saved to:", umap_plot_path, "\n")
 
 # ========================================================
 # Step 3: Clustering and Identifying Regulatory Networks
@@ -1251,8 +1285,45 @@ DimPlot(integrated_data, reduction = "umap", label = TRUE)
 
 integrated_data <- FindNeighbors(integrated_data, dims = 1:20)
 integrated_data <- FindClusters(integrated_data, resolution = 0.5)
-DimPlot(integrated_data, reduction = "umap", group.by = "seurat_clusters")
 
+# UMAP plot of clusters
+p <- DimPlot(integrated_data, reduction = "umap", group.by = "seurat_clusters") +
+  ggtitle("UMAP Clustering Results")
+
+# Define path for saving the UMAP plot
+umap_cluster_plot_path <- file.path(plot_output_path, "umap_clustering_results.png")
+ggsave(umap_cluster_plot_path, plot = p, width = 10, height = 8)
+
+# Identify top genes per cluster if needed for the heatmap
+if ("RNA" %in% names(integrated_data@assays)) {
+  DefaultAssay(integrated_data) <- "RNA"
+  top_genes <- FindAllMarkers(integrated_data, only.pos = TRUE, min.pct = 0.25, thresh.use = 0.25)
+  
+  if(nrow(top_genes) > 0) {
+    top_genes <- top_genes %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+  
+    # Proceed with heatmap if there are enough genes
+    if (nrow(top_genes) > 0) {
+      gene_list <- top_genes$gene
+      data_matrix <- GetAssayData(integrated_data, slot = "data")[gene_list, ]
+  
+      # Call to custom heatmap plotting function
+      heatmap_plot <- gene_heatmap_plot(data_matrix, integrated_data@meta.data$seurat_clusters,
+                                        genes = gene_list, genes_by_cluster = TRUE,
+                                        n_top_genes_per_cluster = 5, scaled = TRUE)
+  
+      # Define path for saving the heatmap
+      heatmap_plot_path <- file.path(plot_output_path, "gene_expression_heatmap.png")
+      ggsave(heatmap_plot_path, plot = heatmap_plot, width = 10, height = 8)
+    } else {
+      print("Not enough genes for heatmap generation.")
+    }
+  } else {
+    print("No significant markers found.")
+  }
+} else {
+  print("RNA assay not found.")
+}
 
 # Check which assays are available
 print(names(integrated_data@assays))
@@ -1355,9 +1426,6 @@ viper_results <- lapply(aracne_output_files, function(aracne_file) {
   
   return(viper_scores)
 })
-
-
-  print(viper_results)
   
   # Debugging: check contents of viper_results
   if (length(viper_results) == 0 || any(sapply(viper_results, is.null))) {
@@ -1427,24 +1495,100 @@ hc <- hclust(dist_matrix)
 clusters <- cutree(hc, k = 5)  # Adjust k based on the expected number of clusters
 
 # Add cluster assignments to Seurat object
-integrated_data$seurat_clusters <- clusters
+integrated_data <- AddMetaData(integrated_data, metadata = clusters, col.name = "seurat_clusters")
 
-# Visualize the clustering results using UMAP
-DimPlot(integrated_data, reduction = "umap", group.by = "seurat_clusters") +
-  ggtitle("Re-clustering based on VIPER scores")
+# Visualize the re-clustering results using UMAP
+p <- DimPlot(integrated_data, reduction = "umap", group.by = "seurat_clusters") +
+  ggtitle("Re-clustering Based on VIPER Scores")
+
+# Define the path and filename for saving the UMAP plot of re-clustered data
+reclustered_umap_plot_path <- file.path(plot_output_path, "reclustered_umap_results.png")
+
+# Save the UMAP plot
+ggsave(reclustered_umap_plot_path, plot = p, width = 10, height = 8)
+cat("Re-clustered UMAP plot saved to:", reclustered_umap_plot_path, "\n")
 
 # ========================================================
 # Step 5: Plotting the frequency of each cluster by patient
 # ========================================================
 
 plot_cluster_frequency <- function(data, cluster_label, patient_label) {
-  df <- data@meta.data %>% group_by(!!sym(cluster_label), !!sym(patient_label)) %>% summarise(count = n())
-  ggplot(df, aes_string(x = cluster_label, y = 'count', fill = patient_label)) + geom_bar(stat = 'identity', position = 'dodge')
+  df <- data@meta.data %>%
+    dplyr::select({{cluster_label}}, {{patient_label}}) %>%
+    dplyr::group_by(.data[[cluster_label]], .data[[patient_label]]) %>%
+    dplyr::summarise(count = n(), .groups = 'drop')
+  
+  ggplot(df, aes(x = as.factor(.data[[cluster_label]]), y = count, fill = as.factor(.data[[patient_label]]))) +
+    geom_bar(stat = 'identity', position = 'dodge') +
+    labs(x = "Cluster", y = "Count", fill = "Patient") +
+    theme_minimal() +
+    theme(
+      panel.background = element_rect(fill = "white", colour = "white"), # Set both fill and colour to white
+      panel.border = element_blank(), # Remove the panel border
+      plot.background = element_rect(fill = "white", colour = "white") # Ensure the entire plot background is white
+    ) +
+    ggtitle("Frequency of Each Cluster by Patient")
 }
 
-plot_cluster_frequency(integrated_data, cluster_label = "seurat_clusters", patient_label = "patient")
+
+
+# Function call to plot cluster frequency
+p1 <- plot_cluster_frequency(integrated_data, cluster_label = "seurat_clusters", patient_label = "patient")
+
+# Define the path and filename for saving the cluster frequency plot
+cluster_frequency_plot_path <- file.path(plot_output_path, "cluster_frequency_by_patient.png")
+
+# Save the cluster frequency plot
+ggsave(cluster_frequency_plot_path, plot = p1, width = 10, height = 8)
+cat("Cluster frequency plot saved to:", cluster_frequency_plot_path, "\n")
 
 # Save the final integrated and annotated Seurat object
-saveRDS(integrated_data, file = "final_integrated_seurat_object.rds")
+saveRDS(integrated_data, file = file.path(base_output_path, "final_integrated_seurat_object.rds"))
 
+# Identify top genes per cluster if not predefined
+top_genes_per_cluster <- FindAllMarkers(integrated_data, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+
+# Check the availability of genes per cluster
+gene_counts <- top_genes_per_cluster %>%
+group_by(cluster) %>%
+summarise(n_genes = n())
+
+# Filter out clusters with fewer than required genes
+valid_clusters <- gene_counts %>% filter(n_genes >= 5)
+
+# Filter top_genes to include only those in valid clusters
+top_genes <- top_genes_per_cluster %>%
+  filter(cluster %in% valid_clusters$cluster) %>%
+  group_by(cluster) %>%
+  top_n(n = 5, wt = avg_log2FC)
+
+# Ensure all selected clusters have enough genes
+if(nrow(top_genes) < length(unique(valid_clusters$cluster)) * 5) {
+  cat("Not all clusters have enough top genes for the heatmap.\n")
+} else {
+  # Check for duplicates in the gene list
+  if(length(unique(top_genes$gene)) != length(top_genes$gene)) {
+    cat("Duplicate gene names found in the top genes list.\n")
+  }
+  
+  # Attempt the heatmap plot if the gene list is correct
+  gene_data <- GetAssayData(integrated_data, slot = "data")
+  if(any(!top_genes$gene %in% rownames(gene_data))) {
+    cat("Some genes in top_genes not found in the data matrix.\n")
+  } else {
+    p2 <- gene_heatmap_plot(gene_data,
+                            integrated_data$seurat_clusters,
+                            genes = top_genes$gene,
+                            n_top_genes_per_cluster = 5,
+                            scaled = TRUE) +
+      ggtitle("Heatmap of Top 5 Genes Per Cluster")
+    
+    # Define the path and filename for saving the gene heatmap plot
+    gene_heatmap_plot_path <- file.path(plot_output_path, "gene_heatmap_per_cluster.png")
+    
+    # Save the gene heatmap plot
+    ggsave(gene_heatmap_plot_path, plot = p2, width = 10, height = 10)
+    cat("Gene heatmap plot saved to:", gene_heatmap_plot_path, "\n")
+  }
+}
 
