@@ -1375,43 +1375,61 @@ viper_results <- lapply(aracne_output_files, function(aracne_file) {
 # Step 4: Re-clustering based on VIPER results
 # ========================================================
 
-# Check if viper_results is a list and properly formatted
+# Verify that viper_results is a list and correctly formatted
 if (!is.list(viper_results)) {
-  stop("VIPER results should be a list.")
+  stop("Error: VIPER results must be a list format.")
 }
 
-# Check if the length of viper_results matches the number of cells in integrated_data
-if (length(viper_results) != length(colnames(integrated_data))) {
-  stop(paste("Length of VIPER results does not match the number of cells in the Seurat object.",
-             "Expected", length(colnames(integrated_data)), "got", length(viper_results)))
-}
-
-# Bind the list elements of viper_results to form a matrix
+# Combine the list elements of viper_results into a matrix
 viper_data <- do.call(cbind, viper_results)
 colnames(viper_data) <- colnames(integrated_data)
 
-# Ensure that the names and number of columns in viper_data match integrated_data
-if (!all(colnames(viper_data) == colnames(integrated_data))) {
-  stop("Column names of the VIPER data do not match the column names of the Seurat object.")
+# Output dimensions of viper_data to verify alignment with expected structure
+cat("Dimensions of combined VIPER data matrix:")
+print(dim(viper_data))
+
+# Confirm that the number of columns in viper_data matches the number of cells in integrated_data
+if (ncol(viper_data) != ncol(integrated_data)) {
+  stop("Error: Mismatch in number of cells between VIPER results and integrated data.",
+       " Expected", ncol(integrated_data), "cells, but got", ncol(viper_data), "in VIPER results.")
 }
 
-# Debugging: Output the dimensions of viper_data and the first few entries to check alignment
-print(dim(viper_data))  # Should match, e.g., 16498 cells
-print(head(viper_data))
+# Validate that the column names in viper_data and integrated_data match
+if (!all(colnames(viper_data) == colnames(integrated_data))) {
+  stop("Error: Column names of the VIPER data do not match those of the Seurat object.")
+}
 
-# Continue with adding VIPER scores as metadata to the Seurat object if checks pass
+# Add VIPER scores as a new assay in the Seurat object
 integrated_data[["VIPER_scores"]] <- CreateAssayObject(viper_data)
 DefaultAssay(integrated_data) <- "VIPER_scores"
 
-# Normalize and find clusters based on VIPER scores
-integrated_data <- NormalizeData(integrated_data) %>%
-  FindVariableFeatures() %>%
-  ScaleData() %>%
-  RunPCA() %>%
-  FindNeighbors() %>%
-  FindClusters(resolution = 0.2)
+# Calculate variance for each feature across all samples (columns)
+feature_variances <- apply(viper_data, 1, var)  # Calculate variance by rows
 
-# Plot the results
+# Filter out features with zero variance
+non_constant_features <- viper_data[feature_variances != 0, ]
+
+# Debug: Print the number of features with non-zero variance
+cat("Number of features with non-zero variance:", nrow(non_constant_features), "\n")
+
+# Ensure there are enough features left to continue the analysis
+if (nrow(non_constant_features) < 2) {
+  stop("Insufficient variable features for PCA.")
+}
+
+# Update the assay object with non-constant features
+integrated_data[["VIPER_scores"]] <- CreateAssayObject(non_constant_features)
+DefaultAssay(integrated_data) <- "VIPER_scores"
+
+# Perform hierarchical clustering on transposed data
+dist_matrix <- dist(t(non_constant_features))  # Calculate distance between samples
+hc <- hclust(dist_matrix)
+clusters <- cutree(hc, k = 5)  # Adjust k based on the expected number of clusters
+
+# Add cluster assignments to Seurat object
+integrated_data$seurat_clusters <- clusters
+
+# Visualize the clustering results using UMAP
 DimPlot(integrated_data, reduction = "umap", group.by = "seurat_clusters") +
   ggtitle("Re-clustering based on VIPER scores")
 
@@ -1428,4 +1446,5 @@ plot_cluster_frequency(integrated_data, cluster_label = "seurat_clusters", patie
 
 # Save the final integrated and annotated Seurat object
 saveRDS(integrated_data, file = "final_integrated_seurat_object.rds")
+
 
