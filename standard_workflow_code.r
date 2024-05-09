@@ -39,10 +39,15 @@ library(plyr)
 gene_heatmap_plot <- function(dat, clust, genes, genes_by_cluster = TRUE,
                               n_top_genes_per_cluster = 5, color_palette = NULL,
                               scaled = FALSE) {
+  # Check if data is sufficient
+  if (is.null(dat) || length(genes) != nrow(dat)) {
+    stop("Data is not sufficient or gene list does not match data dimensions.")
+  }
+
   if (length(unique(clust)) == 0) {
     stop("No valid cluster data found.")
   }
-  identities <- levels(factor(clust))  # Ensure clust is treated as a factor
+  identities <- levels(factor(clust))
 
   # Prepare color palette
   my_color_palette <- generate_color_palette(identities, color_palette)
@@ -72,32 +77,35 @@ gene_heatmap_plot <- function(dat, clust, genes, genes_by_cluster = TRUE,
 
   # Inside gene_heatmap_plot, ensure no mismatch in dimensions
   if (nrow(x) != length(genes)) {
-    stop("Blah: Mismatch in expected rows and data dimensions. Check gene and cluster counts.")
+    stop("Mismatch: Check gene & cluster counts.")
   }
 
   # Validate gaps
   expected_rows <- length(identities) * n_top_genes_per_cluster
   if (nrow(t) != expected_rows) {
-    stop("Mismatch in expected rows and data dimensions. Check gene and cluster counts.")
+    stop("Mismatch: Check gene & cluster counts.")
   }
 
   # Configure pheatmap arguments
   pheatmap_args <- list(t, cluster_rows = FALSE, show_rownames = TRUE,
                         cluster_cols = FALSE, annotation_col = df,
                         breaks = mat_breaks,
-                        color = colorRampPalette(c("blue", "white", "red"))(length(mat_breaks)),
+                        color = colorRampPalette(c("blue",
+                                                   "white",
+                                                   "red"))
+                        (length(mat_breaks)),
                         fontsize_row = ifelse(genes_by_cluster, 10, 8),
                         show_colnames = FALSE,
                         annotation_colors = annotations$anno_colors)
 
   if (!is.null(annotations$anno_row)) {
     pheatmap_args$annotation_row <- annotations$anno_row
-    pheatmap_args$gaps_row <- (2:length(unique(clust)) - 1) * n_top_genes_per_cluster
+    pheatmap_args$gaps_row <-
+      (2:length(unique(clust)) - 1) * n_top_genes_per_cluster
   }
 
   do.call(pheatmap, pheatmap_args)
 }
-
 
 #' Generate a color palette
 #'
@@ -115,13 +123,12 @@ generate_color_palette <- function(identities, color_palette = NULL) {
       return(hue_pal()(length(identities)))
     } else {
       warning("No identities provided, returning empty color palette.")
-      return(character(0))  # Return an empty character vector if no identities
+      return(character(0))
     }
   } else {
     return(color_palette)
   }
 }
-
 
 #' Calculate row-wise z-score
 #'
@@ -154,7 +161,6 @@ generate_mat_breaks <- function(t) {
                                       length(lower_breaks) +
                                         length(upper_breaks) + 1)]
 }
-
 
 #' Generate annotations for heatmap
 #'
@@ -278,7 +284,6 @@ compute_silhouette_width <- function(clustering, distance_matrix) {
   silhouette_scores <- silhouette(as.numeric(clustering), distance_matrix)
   mean(silhouette_scores[, "sil_width"])
 }
-
 
 #' Create a large SingleR object with improved control over tuning
 #'
@@ -439,7 +444,6 @@ combine_singler_objects <- function(singler_objects, cell_order,
   SingleR::SingleR.Combine(singler_objects, order = cell_order,
                            clusters = clusters, xy = xy)
 }
-
 
 #' Identify and Merge Unique Master Regulators for Each Cell
 #'
@@ -704,23 +708,25 @@ impute_matrix <- function(dat_mat, knn_neighbors) {
   imp_mat <- matrix(0, nrow = nrow(dat_mat), ncol = ncol(dat_mat))
   colnames(imp_mat) <- colnames(dat_mat)
   rownames(imp_mat) <- rownames(dat_mat)
-  
+
   # Iterate over each sample to impute based on nearest neighbors
   for (i in seq_len(ncol(dat_mat))) {
     # Retrieve neighbor indices for the current sample
     neighbor_cols <- c(i, knn_neighbors[i, ])
-    
+
     # Ensure all referenced indices are within bounds
     if (any(neighbor_cols > ncol(dat_mat))) {
-      stop(paste("Out of bounds error at sample", i, 
-                 ": Neighbor indices", toString(neighbor_cols[neighbor_cols > ncol(dat_mat)]),
+      stop(paste("Out of bounds error at sample", i,
+                 ": Neighbor indices",
+                 toString(neighbor_cols[neighbor_cols > ncol(dat_mat)]),
                  "are greater than the number of columns", ncol(dat_mat)))
     }
-    
+
     # Aggregate data from the original matrix using the neighbor indices
-    imp_mat[, i] <- rowSums(dat_mat[, neighbor_cols, drop = FALSE], na.rm = TRUE)
+    imp_mat[, i] <-
+      rowSums(dat_mat[, neighbor_cols, drop = FALSE], na.rm = TRUE)
   }
-  
+
   return(imp_mat)
 }
 
@@ -923,11 +929,21 @@ format_matrix_for_tsv <- function(dat_mat) {
   rbind(c("gene", sample_names), cbind(gene_ids, dat_mat))
 }
 
-# Function to load metacell matrices, possibly normalize, and save for ARACNe
+#' Prepare and Save Expression Matrix for ARACNe Analysis
+#'
+#' This function prepares and saves an expression matrix for use in ARACNe
+#' analysis. It first removes duplicate genes, then subsets the matrix if
+#' necessary, and finally saves the matrix in both RDS and TSV formats.
+#'
+#' @param base_output_path  The base path for the output files.
+#' @param file_suffix       The suffix to append to the input file name.
+#'
 prep_and_save_expr_for_aracne <- function(base_output_path, file_suffix) {
-  files <- list.files(base_output_path, pattern = paste0(file_suffix, "$"), full.names = TRUE)
+  files <- list.files(base_output_path, pattern = paste0(file_suffix, "$"),
+                      full.names = TRUE)
   expr_files <- lapply(files, function(file_path) {
-    expr_data <- read.table(file_path, header = TRUE, sep = "\t", row.names = 1)
+    expr_data <- read.table(file_path, header = TRUE, sep = "\t",
+                            row.names = 1)
     out_path <- gsub(".tsv$", "_for_aracne.tsv", file_path)
     save_matrix_for_aracne(expr_data, out_path)
     return(out_path)
@@ -943,14 +959,17 @@ prep_and_save_expr_for_aracne <- function(base_output_path, file_suffix) {
 #' @param output_file Path for the output file.
 save_matrix_for_aracne <- function(expression_matrix, output_file) {
   # Ensure the matrix has proper row and column names
-  if (is.null(colnames(expression_matrix)) || is.null(rownames(expression_matrix))) {
+  if (is.null(colnames(expression_matrix)) ||
+        is.null(rownames(expression_matrix))) {
     stop("Expression matrix must have row and column names.")
   }
-  
+
   # Ensure there is an extra column in the header (if not already present)
-  cat("\t", file = output_file, append = FALSE)  # Start with a tab for an empty corner in the header
+  cat("\t", file = output_file, append = FALSE)
   suppressWarnings(
-  write.table(expression_matrix, file = output_file, sep = "\t", quote = FALSE, row.names = TRUE, col.names = TRUE, append = TRUE)
+    write.table(expression_matrix, file = output_file, sep = "\t",
+                quote = FALSE, row.names = TRUE, col.names = TRUE,
+                append = TRUE)
   )
 }
 
@@ -958,18 +977,19 @@ save_matrix_for_aracne <- function(expression_matrix, output_file) {
 #'
 #' Executes ARACNe3 on the provided expression matrix and regulator list.
 #'
+#' @param aracne_bin Path to the ARACNe3 binary.
 #' @param exp_file Path to the expression matrix file.
 #' @param regulators_file Path to the file containing regulator gene names.
 #' @param output_dir Directory to store ARACNe output.
 #' @param threads Number of threads to use for ARACNe computation.
 #' @param seed Seed for random number generation in ARACNe.
-run_aracne <- function(exp_file, regulators_file, output_dir, threads = 1, seed = 123) {
-  # Correct path to the ARACNe3 executable
-  cmd <- sprintf("/Users/apple/Documents/Research/aleks-lab/repos/ARACNe3/build/src/app/ARACNe3_app_release -e %s -r %s -o %s --threads %d --seed %d",
-                 exp_file, regulators_file, output_dir, threads, seed)
+run_aracne <- function(aracne_bin, exp_file, regulators_file, output_dir,
+                       threads = 1, seed = 123) {
+  cmd <-
+    sprintf("%s -e %s -r %s -o %s --threads %d --seed %d",
+            aracne_bin, exp_file, regulators_file, output_dir, threads, seed)
   system(cmd)
 }
-
 
 #' Process ARACNe Results for VIPER Analysis
 #'
@@ -1012,26 +1032,19 @@ convert_to_regulon <- function(aracne_data, exp_mat) {
     stop("Expression matrix is not correctly formatted or is NULL.")
   }
 
-  print("Processing regulon conversion with provided ARACNe data and expression matrix.")
-  print(head(aracne_data))
-
   # Create a temporary file to store processed ARACNe data
   temp_file <- tempfile()
-  write.table(aracne_data, temp_file, sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
-
-  cat("Starting ARACNe to regulon conversion...\n")
-  print("HEAD of temp_file")
-  print(head(temp_file))
+  write.table(aracne_data, temp_file, sep = "\t", row.names = FALSE,
+              col.names = FALSE, quote = FALSE)
 
   tryCatch({
-    regulon_object <- aracne2regulon(afile = temp_file, eset = exp_mat, format = "3col", verbose = TRUE)
-    cat("Regulon conversion successful.\n")
+    regulon_object <- aracne2regulon(afile = temp_file, eset = exp_mat,
+                                     format = "3col", verbose = TRUE)
   }, error = function(e) {
     cat("Error during regulon conversion: ", e$message, "\n")
     stop("Failed to convert ARACNe output to regulon object: ", e$message)
   })
 
-  # Clean up
   unlink(temp_file)
 
   if (is.null(regulon_object) || length(regulon_object) == 0) {
@@ -1040,9 +1053,6 @@ convert_to_regulon <- function(aracne_data, exp_mat) {
 
   return(regulon_object)
 }
-
-
-
 
 #' Save Regulon Object to File
 #'
@@ -1145,10 +1155,17 @@ weighted_sum_z_scores <- function(z_scores, weights) {
 # Step 1: Load Data
 # ========================================================
 
-# Define base path where the directories are located
+
+################## DEFINE YOUR LOCAL PATHS HERE ##################
+
 base_path <- "/Users/apple/Desktop/240307_JOEL_DAVID_6_HUMAN_10X"
 base_output_path <- "/Users/apple/Desktop/output"
 plot_output_path <- file.path(base_output_path, "plots")
+aracne_binary_path <- paste0("/Users/apple/Documents/Research/aleks-lab/",
+                             "repos/ARACNe3/build/src/app/",
+                             "ARACNe3_app_release")
+
+#################################################################
 
 # Create the directory if it does not exist
 if (!dir.exists(plot_output_path)) {
@@ -1193,23 +1210,25 @@ for (patient_id in patients) {
   seurat_object <- RenameCells(seurat_object, add.cell.id = patient_id)
   seurat_object$patient <- patient_id
 
-# Check if the RNA assay is correctly loaded
-if ("RNA" %in% names(seurat_object@assays)) {
-  # Extract and check the counts matrix using GetAssayData
-  counts_matrix <- GetAssayData(object = seurat_object, assay = "RNA", slot = "counts")
-  if (is.null(counts_matrix) || ncol(counts_matrix) == 0 || nrow(counts_matrix) == 0) {
-    stop("Counts matrix is empty or NULL. Check your Seurat object and data extraction steps.")
+  # Check if the RNA assay is correctly loaded
+  if ("RNA" %in% names(seurat_object@assays)) {
+    # Extract and check the counts matrix using GetAssayData
+    counts_matrix <-
+      GetAssayData(object = seurat_object, assay = "RNA", slot = "counts")
+    if (is.null(counts_matrix) ||
+          ncol(counts_matrix) == 0 ||
+          nrow(counts_matrix) == 0) {
+      stop(paste0("Counts matrix is empty or NULL.",
+                  "Check your Seurat object and data extraction steps."))
+    } else {
+      print(paste("Counts matrix dimensions:", nrow(counts_matrix),
+                  "genes X", ncol(counts_matrix), "cells"))
+    }
   } else {
-    print(paste("Counts matrix dimensions:", nrow(counts_matrix), "genes X", ncol(counts_matrix), "cells"))
+    stop("RNA assay not found in the Seurat object.")
   }
-} else {
-  stop("RNA assay not found in the Seurat object.")
-}
-
 
   # Calculate the percentage of mitochondrial genes
-  # Ensure mitochondrial genes are correctly identified with your dataset's
-  # naming convention
   mitochondrial_genes <-
     grep("^MT-",
          rownames(GetAssayData(seurat_object, assay = "RNA", slot = "counts")),
@@ -1217,7 +1236,6 @@ if ("RNA" %in% names(seurat_object@assays)) {
   seurat_object[["percent.mt"]] <-
     PercentageFeatureSet(seurat_object, features = mitochondrial_genes)
 
-  # Append to the list
   patient_data_list[[patient_id]] <- seurat_object
 }
 
@@ -1234,10 +1252,14 @@ patient_data_list <- lapply(patient_data_list, function(x) {
 # Adjusted the loop to print validation status once per patient dataset
 lapply(names(patient_data_list), function(patient_id) {
   seurat_object <- patient_data_list[[patient_id]]
-  if ("RNA" %in% names(seurat_object@assays) && ncol(GetAssayData(seurat_object, assay = "RNA", slot = "counts")) > 0) {
-    message(paste("Seurat object for patient", patient_id, "is ready for integration."))
+  if ("RNA" %in% names(seurat_object@assays) &&
+        ncol(GetAssayData(seurat_object, assay = "RNA",
+                          slot = "counts")) > 0) {
+    message(paste("Seurat object for patient", patient_id,
+                  "is ready for integration."))
   } else {
-    stop(paste("Seurat object for patient", patient_id, "is not ready for integration."))
+    stop(paste("Seurat object for patient", patient_id,
+               "is not ready for integration."))
   }
 })
 
@@ -1267,10 +1289,11 @@ integrated_data <- RunPCA(integrated_data, verbose = TRUE)
 # Generate a UMAP reduction for visualization
 integrated_data <- RunUMAP(integrated_data, reduction = "pca", dims = 1:20)
 
-p <- DimPlot(integrated_data, reduction = "umap", group.by = "patient", label = TRUE) +
+p <- DimPlot(integrated_data, reduction = "umap", group.by = "patient",
+             label = TRUE) +
   ggtitle("UMAP Visualization of Integrated Single-cell Data") +
-  scale_color_viridis_d() +  # This adds a color scale, replace 'patient' with appropriate metadata column name
-  theme(legend.position = "right")  # Adjust legend position
+  scale_color_viridis_d() +
+  theme(legend.position = "right")
 
 # Define the path and filename for the UMAP plot
 umap_plot_path <- file.path(plot_output_path, "umap_integration_results.png")
@@ -1287,46 +1310,63 @@ integrated_data <- FindNeighbors(integrated_data, dims = 1:20)
 integrated_data <- FindClusters(integrated_data, resolution = 0.5)
 
 # UMAP plot of clusters
-p <- DimPlot(integrated_data, reduction = "umap", group.by = "seurat_clusters") +
+p <- DimPlot(integrated_data, reduction = "umap",
+             group.by = "seurat_clusters") +
   ggtitle("UMAP Clustering Results")
 
 # Define path for saving the UMAP plot
-umap_cluster_plot_path <- file.path(plot_output_path, "umap_clustering_results.png")
+umap_cluster_plot_path <-
+  file.path(plot_output_path, "umap_clustering_results.png")
 ggsave(umap_cluster_plot_path, plot = p, width = 10, height = 8)
 
 # Identify top genes per cluster if needed for the heatmap
 if ("RNA" %in% names(integrated_data@assays)) {
   DefaultAssay(integrated_data) <- "RNA"
-  top_genes <- FindAllMarkers(integrated_data, only.pos = TRUE, min.pct = 0.25, thresh.use = 0.25)
-  
-  if(nrow(top_genes) > 0) {
-    top_genes <- top_genes %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
-  
-    # Proceed with heatmap if there are enough genes
+  # Extremely lenient thresholds to try capturing any differences
+  top_genes <- FindAllMarkers(integrated_data, only.pos = TRUE, min.pct = 0.1,
+                              logfc.threshold = 0.1)
+
+  if (nrow(top_genes) > 0) {
+    # Group and select top 5 genes per cluster by log fold change
+    top_genes <- top_genes %>%
+      dplyr::group_by(cluster) %>%
+      dplyr::top_n(n = 5, wt = avg_log2FC)
+
     if (nrow(top_genes) > 0) {
       gene_list <- top_genes$gene
-      data_matrix <- GetAssayData(integrated_data, slot = "data")[gene_list, ]
-  
-      # Call to custom heatmap plotting function
-      heatmap_plot <- gene_heatmap_plot(data_matrix, integrated_data@meta.data$seurat_clusters,
-                                        genes = gene_list, genes_by_cluster = TRUE,
-                                        n_top_genes_per_cluster = 5, scaled = TRUE)
-  
-      # Define path for saving the heatmap
-      heatmap_plot_path <- file.path(plot_output_path, "gene_expression_heatmap.png")
-      ggsave(heatmap_plot_path, plot = heatmap_plot, width = 10, height = 8)
+      # Ensure gene_list contains valid gene names present in the dataset
+      data_matrix <-
+        GetAssayData(integrated_data, slot = "data")[gene_list, , drop = FALSE]
+
+      if (!is.null(data_matrix) && ncol(data_matrix) > 0 &&
+            length(gene_list) == nrow(data_matrix)) {
+        # Generate heatmap
+        heatmap_plot <-
+          gene_heatmap_plot(data_matrix,
+                            integrated_data@meta.data$seurat_clusters,
+                            genes = gene_list, genes_by_cluster = TRUE,
+                            n_top_genes_per_cluster = 5, scaled = TRUE)
+
+        # Save the heatmap
+        heatmap_plot_path <-
+          file.path(plot_output_path, "gene_expression_heatmap.png")
+        ggsave(heatmap_plot_path, plot = heatmap_plot, width = 10, height = 8)
+      } else {
+        message(paste0("Heatmap data matrix is not valid for plotting.",
+                       " Check gene list and data matrix dimensions."))
+      }
     } else {
-      print("Not enough genes for heatmap generation.")
+      message(paste0("Not enough significant markers",
+                     " found after grouping by cluster."))
     }
   } else {
-    print("No significant markers found.")
+    message(paste0("No significant markers found across any clusters.",
+                   " Consider adjusting the thresholds or revising",
+                   " the clustering approach."))
   }
 } else {
-  print("RNA assay not found.")
+  message("RNA assay not found in the dataset.")
 }
-
-# Check which assays are available
-print(names(integrated_data@assays))
 
 # Ensure the SCT assay is set as default if it's being used
 DefaultAssay(integrated_data) <- "SCT"
@@ -1334,11 +1374,15 @@ DefaultAssay(integrated_data) <- "SCT"
 # Try to access the normalized data from the SCT assay
 if ("SCT" %in% names(integrated_data@assays)) {
   # Accessing normalized data (this should work for SCTransform output)
-  counts_matrix <- GetAssayData(object = integrated_data, assay = "SCT", slot = "data")
-  if (is.null(counts_matrix) || ncol(counts_matrix) == 0 || nrow(counts_matrix) == 0) {
-    stop("Normalized data matrix is empty or NULL. Check your Seurat object and data extraction steps.")
+  counts_matrix <-
+    GetAssayData(object = integrated_data, assay = "SCT", slot = "data")
+  if (is.null(counts_matrix) || ncol(counts_matrix) == 0 ||
+        nrow(counts_matrix) == 0) {
+    stop(paste0("Normalized data matrix is empty or NULL.",
+                "Check your Seurat object and data extraction steps."))
   } else {
-    print(paste("Normalized data matrix dimensions:", nrow(counts_matrix), "genes X", ncol(counts_matrix), "cells"))
+    print(paste("Normalized data matrix dimensions:", nrow(counts_matrix),
+                "genes X", ncol(counts_matrix), "cells"))
   }
 } else {
   stop("SCT assay not found in the integrated Seurat object.")
@@ -1353,90 +1397,80 @@ metacell_matrices <- make_cmfa(dat_mat = counts_matrix,
 # Assuming metacell_matrices have been created as shown
 if (length(metacell_matrices) > 0) {
   # Prepare and save the expression data for each cluster
-  expression_files <- prep_and_save_expr_for_aracne(base_output_path, "_all_all.txt.tsv")
-  
+  expression_files <-
+    prep_and_save_expr_for_aracne(base_output_path, "_all_all.txt.tsv")
+
   # Get regulators from a file
   regulators_file_path <- paste0(base_output_path, "/regulators.txt")
   regulators <- readLines(paste0(base_output_path, "/regulators_list.txt"))
   writeLines(regulators, con = regulators_file_path)
-  
+
   # Running ARACNe for each cluster file
   aracne_output_dir <- paste0(base_output_path, "/aracne_results")
   lapply(expression_files, function(exp_file) {
-    run_aracne(exp_file, regulators_file_path, aracne_output_dir, threads = 4, seed = 42)
+    run_aracne(aracne_binary_path, exp_file, regulators_file_path,
+               aracne_output_dir, threads = 4, seed = 42)
   })
-  
+
   # Integrating VIPER analysis
   # Process for ARACNe and VIPER
-aracne_output_files <- list.files(aracne_output_dir, pattern = "consolidated-net_.*\\.tsv$", full.names = TRUE)
+  aracne_output_files <- list.files(aracne_output_dir,
+                                    pattern = "consolidated-net_.*\\.tsv$",
+                                    full.names = TRUE)
 
-viper_results <- lapply(aracne_output_files, function(aracne_file) {
-  cat("Processing ARACNe output file:", aracne_file, "\n")
-  
-  # Load ARACNe output file without headers
-  aracne_data <- read.table(aracne_file, header = FALSE, sep = "\t", check.names = FALSE, stringsAsFactors = FALSE, skip = 1)
+  viper_results <- lapply(aracne_output_files, function(aracne_file) {
+    cat("Processing ARACNe output file:", aracne_file, "\n")
 
-  ## Only include the first three columns
-  aracne_data <- aracne_data[, 1:3]
-  
-  # Define column names manually
-  colnames(aracne_data) <- c("regulator", "target", "mi")
-  
-  # Print raw 'mi' data for inspection before conversion
-  print("Raw mutual information values:")
-  print(aracne_data$mi[1:10])  # Print first 10 entries to check
-  
-  # Convert the 'mi' column to numeric, checking for invalid data
-  aracne_data$mi <- as.numeric(aracne_data$mi)
-  
-  # Check if there are NA values after conversion and handle them
-  if (anyNA(aracne_data$mi)) {
-    print("Entries that could not be converted to numeric:")
-    print(aracne_data$mi[is.na(aracne_data$mi)])  # Print problematic entries
-    ## Find the actual value of that entry
-    print("Problematic entry:")
-    print(aracne_data[which(is.na(aracne_data$mi)), ])
-    ## Remove these entries
-    aracne_data <- aracne_data[!is.na(aracne_data$mi), ]
+    # Load ARACNe output file without headers
+    aracne_data <- read.table(aracne_file, header = FALSE, sep = "\t",
+                              check.names = FALSE, stringsAsFactors = FALSE,
+                              skip = 1)
 
-    # stop("NA values found in mutual information values after conversion.")
-  }
-  
-  print("Processed ARACNe output data:")
-  print(head(aracne_data))
-  
-  # Load expression matrix from Seurat object
-  exp_mat <- GetAssayData(object = integrated_data, assay = "SCT", slot = "data")
-  if (is.null(exp_mat) || ncol(exp_mat) == 0 || nrow(exp_mat) == 0) {
-    stop("Expression matrix is empty or NULL. Check your Seurat object and data extraction steps.")
-  }
-  print(paste("Expression matrix dimensions: Genes =", nrow(exp_mat), "Samples =", ncol(exp_mat)))
+    #Only include the first three columns
+    aracne_data <- aracne_data[, 1:3]
 
-  ## Convert exp_mat to a matrix
-  exp_mat <- as.matrix(exp_mat)
-  
-  # Convert and analyze
-  regulon_object <- convert_to_regulon(aracne_data, exp_mat)
-  viper_scores <- tryCatch({
-    viper::viper(exp_mat, regulon_object)
-  }, error = function(e) {
-    cat("Error in VIPER analysis:", e$message, "\n")
-    NULL
+    # Define column names manually
+    colnames(aracne_data) <- c("regulator", "target", "mi")
+
+    # Convert the 'mi' column to numeric, checking for invalid data
+    aracne_data$mi <- as.numeric(aracne_data$mi)
+
+    # Load expression matrix from Seurat object
+    exp_mat <-
+      GetAssayData(object = integrated_data, assay = "SCT", slot = "data")
+    if (is.null(exp_mat) || ncol(exp_mat) == 0 || nrow(exp_mat) == 0) {
+      stop(paste0("Expression matrix is empty or NULL.",
+                  " Check your Seurat object and data extraction steps."))
+    }
+    print(paste("Expression matrix dimensions: Genes =", nrow(exp_mat),
+                "Samples =", ncol(exp_mat)))
+
+    ## Convert exp_mat to a matrix
+    exp_mat <- as.matrix(exp_mat)
+
+    # Convert and analyze
+    regulon_object <- convert_to_regulon(aracne_data, exp_mat)
+    viper_scores <- tryCatch({
+      viper::viper(exp_mat, regulon_object)
+    }, error = function(e) {
+      cat("Error in VIPER analysis:", e$message, "\n")
+      NULL
+    })
+
+    return(viper_scores)
   })
-  
-  return(viper_scores)
-})
-  
+
   # Debugging: check contents of viper_results
   if (length(viper_results) == 0 || any(sapply(viper_results, is.null))) {
     stop("VIPER results are empty or not properly formed.")
   }
-  
+
   # Save VIPER results
   viper_results_path <- paste0(base_output_path, "/viper_results.rds")
   saveRDS(viper_results, file = viper_results_path)
 } else {
-  cat("No metacell matrices were generated. Skipping ARACNe and VIPER analysis.\n")
+  cat(paste0("No metacell matrices were generated.",
+             "Skipping ARACNe and VIPER analysis.\n"))
 }
 
 # ========================================================
@@ -1456,29 +1490,31 @@ colnames(viper_data) <- colnames(integrated_data)
 cat("Dimensions of combined VIPER data matrix:")
 print(dim(viper_data))
 
-# Confirm that the number of columns in viper_data matches the number of cells in integrated_data
+# The # of columns in viper_data matches the # of cells in integrated_data?
 if (ncol(viper_data) != ncol(integrated_data)) {
-  stop("Error: Mismatch in number of cells between VIPER results and integrated data.",
-       " Expected", ncol(integrated_data), "cells, but got", ncol(viper_data), "in VIPER results.")
+  stop("Error: Mismatch in # of cells between VIPER and integrated data.",
+       " Expected", ncol(integrated_data), "cells, but got",
+       ncol(viper_data), "in VIPER results.")
 }
 
 # Validate that the column names in viper_data and integrated_data match
 if (!all(colnames(viper_data) == colnames(integrated_data))) {
-  stop("Error: Column names of the VIPER data do not match those of the Seurat object.")
+  stop(paste0("Error: Column names of the VIPER data do not",
+              " match those of the Seurat object."))
 }
 
 # Add VIPER scores as a new assay in the Seurat object
 integrated_data[["VIPER_scores"]] <- CreateAssayObject(viper_data)
 DefaultAssay(integrated_data) <- "VIPER_scores"
 
-# Calculate variance for each feature across all samples (columns)
-feature_variances <- apply(viper_data, 1, var)  # Calculate variance by rows
+feature_variances <- apply(viper_data, 1, var)
 
 # Filter out features with zero variance
 non_constant_features <- viper_data[feature_variances != 0, ]
 
 # Debug: Print the number of features with non-zero variance
-cat("Number of features with non-zero variance:", nrow(non_constant_features), "\n")
+cat("Number of features with non-zero variance:",
+    nrow(non_constant_features), "\n")
 
 # Ensure there are enough features left to continue the analysis
 if (nrow(non_constant_features) < 2) {
@@ -1490,23 +1526,23 @@ integrated_data[["VIPER_scores"]] <- CreateAssayObject(non_constant_features)
 DefaultAssay(integrated_data) <- "VIPER_scores"
 
 # Perform hierarchical clustering on transposed data
-dist_matrix <- dist(t(non_constant_features))  # Calculate distance between samples
+dist_matrix <- dist(t(non_constant_features))
 hc <- hclust(dist_matrix)
-clusters <- cutree(hc, k = 5)  # Adjust k based on the expected number of clusters
+clusters <- cutree(hc, k = 5)
 
 # Add cluster assignments to Seurat object
-integrated_data <- AddMetaData(integrated_data, metadata = clusters, col.name = "seurat_clusters")
+integrated_data <- AddMetaData(integrated_data, metadata = clusters,
+                               col.name = "seurat_clusters")
 
 # Visualize the re-clustering results using UMAP
-p <- DimPlot(integrated_data, reduction = "umap", group.by = "seurat_clusters") +
+p <- DimPlot(integrated_data, reduction = "umap",
+             group.by = "seurat_clusters") +
   ggtitle("Re-clustering Based on VIPER Scores")
 
 # Define the path and filename for saving the UMAP plot of re-clustered data
-reclustered_umap_plot_path <- file.path(plot_output_path, "reclustered_umap_results.png")
-
-# Save the UMAP plot
+reclustered_umap_plot_path <-
+  file.path(plot_output_path, "reclustered_umap_results.png")
 ggsave(reclustered_umap_plot_path, plot = p, width = 10, height = 8)
-cat("Re-clustered UMAP plot saved to:", reclustered_umap_plot_path, "\n")
 
 # ========================================================
 # Step 5: Plotting the frequency of each cluster by patient
@@ -1516,42 +1552,46 @@ plot_cluster_frequency <- function(data, cluster_label, patient_label) {
   df <- data@meta.data %>%
     dplyr::select({{cluster_label}}, {{patient_label}}) %>%
     dplyr::group_by(.data[[cluster_label]], .data[[patient_label]]) %>%
-    dplyr::summarise(count = n(), .groups = 'drop')
-  
-  ggplot(df, aes(x = as.factor(.data[[cluster_label]]), y = count, fill = as.factor(.data[[patient_label]]))) +
-    geom_bar(stat = 'identity', position = 'dodge') +
+    dplyr::summarise(count = n(), .groups = "drop")
+
+  ggplot(df,
+         aes(x = as.factor(.data[[cluster_label]]), y = count,
+             fill = as.factor(.data[[patient_label]]))) +
+    geom_bar(stat = "identity", position = "dodge") +
     labs(x = "Cluster", y = "Count", fill = "Patient") +
     theme_minimal() +
     theme(
-      panel.background = element_rect(fill = "white", colour = "white"), # Set both fill and colour to white
+      panel.background = element_rect(fill = "white", colour = "white"),
       panel.border = element_blank(), # Remove the panel border
-      plot.background = element_rect(fill = "white", colour = "white") # Ensure the entire plot background is white
+      plot.background = element_rect(fill = "white", colour = "white")
     ) +
     ggtitle("Frequency of Each Cluster by Patient")
 }
 
-
-
 # Function call to plot cluster frequency
-p1 <- plot_cluster_frequency(integrated_data, cluster_label = "seurat_clusters", patient_label = "patient")
+p1 <- plot_cluster_frequency(integrated_data,
+                             cluster_label = "seurat_clusters",
+                             patient_label = "patient")
 
 # Define the path and filename for saving the cluster frequency plot
-cluster_frequency_plot_path <- file.path(plot_output_path, "cluster_frequency_by_patient.png")
-
-# Save the cluster frequency plot
+cluster_frequency_plot_path <-
+  file.path(plot_output_path, "cluster_frequency_by_patient.png")
 ggsave(cluster_frequency_plot_path, plot = p1, width = 10, height = 8)
-cat("Cluster frequency plot saved to:", cluster_frequency_plot_path, "\n")
 
 # Save the final integrated and annotated Seurat object
-saveRDS(integrated_data, file = file.path(base_output_path, "final_integrated_seurat_object.rds"))
+saveRDS(integrated_data,
+        file = file.path(base_output_path,
+                         "final_integrated_seurat_object.rds"))
 
 # Identify top genes per cluster if not predefined
-top_genes_per_cluster <- FindAllMarkers(integrated_data, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+top_genes_per_cluster <- FindAllMarkers(integrated_data, only.pos = TRUE,
+                                        min.pct = 0.25,
+                                        logfc.threshold = 0.25)
 
 # Check the availability of genes per cluster
 gene_counts <- top_genes_per_cluster %>%
-group_by(cluster) %>%
-summarise(n_genes = n())
+  group_by(cluster) %>%
+  summarise(n_genes = n())
 
 # Filter out clusters with fewer than required genes
 valid_clusters <- gene_counts %>% filter(n_genes >= 5)
@@ -1563,17 +1603,17 @@ top_genes <- top_genes_per_cluster %>%
   top_n(n = 5, wt = avg_log2FC)
 
 # Ensure all selected clusters have enough genes
-if(nrow(top_genes) < length(unique(valid_clusters$cluster)) * 5) {
+if (nrow(top_genes) < length(unique(valid_clusters$cluster)) * 5) {
   cat("Not all clusters have enough top genes for the heatmap.\n")
 } else {
   # Check for duplicates in the gene list
-  if(length(unique(top_genes$gene)) != length(top_genes$gene)) {
+  if (length(unique(top_genes$gene)) != length(top_genes$gene)) {
     cat("Duplicate gene names found in the top genes list.\n")
   }
-  
+
   # Attempt the heatmap plot if the gene list is correct
   gene_data <- GetAssayData(integrated_data, slot = "data")
-  if(any(!top_genes$gene %in% rownames(gene_data))) {
+  if (any(!top_genes$gene %in% rownames(gene_data))) {
     cat("Some genes in top_genes not found in the data matrix.\n")
   } else {
     p2 <- gene_heatmap_plot(gene_data,
@@ -1582,13 +1622,10 @@ if(nrow(top_genes) < length(unique(valid_clusters$cluster)) * 5) {
                             n_top_genes_per_cluster = 5,
                             scaled = TRUE) +
       ggtitle("Heatmap of Top 5 Genes Per Cluster")
-    
+
     # Define the path and filename for saving the gene heatmap plot
-    gene_heatmap_plot_path <- file.path(plot_output_path, "gene_heatmap_per_cluster.png")
-    
-    # Save the gene heatmap plot
+    gene_heatmap_plot_path <-
+      file.path(plot_output_path, "gene_heatmap_per_cluster.png")
     ggsave(gene_heatmap_plot_path, plot = p2, width = 10, height = 10)
-    cat("Gene heatmap plot saved to:", gene_heatmap_plot_path, "\n")
   }
 }
-
