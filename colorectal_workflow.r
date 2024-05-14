@@ -20,11 +20,6 @@ library(scales)
 library(ggrepel)
 library(plyr)
 
-# ========================================================
-# Step 1: Load Data
-# ========================================================
-
-
 ################## DEFINE YOUR LOCAL PATHS HERE ##################
 
 base_path <- "/Users/apple/Desktop/240307_JOEL_DAVID_6_HUMAN_10X"
@@ -35,6 +30,10 @@ aracne_binary_path <- paste0("/Users/apple/Documents/Research/aleks-lab/",
                              "ARACNe3_app_release")
 
 #################################################################
+
+# ========================================================
+# Step 1: Load Data
+# ========================================================
 
 # Create the directory if it does not exist
 if (!dir.exists(plot_output_path)) {
@@ -83,7 +82,7 @@ for (patient_id in patients) {
   if ("RNA" %in% names(seurat_object@assays)) {
     # Extract and check the counts matrix using GetAssayData
     counts_matrix <-
-      GetAssayData(object = seurat_object, assay = "RNA", slot = "counts")
+      GetAssayData(object = seurat_object, assay = "RNA", layer = "counts")
     if (is.null(counts_matrix) ||
           ncol(counts_matrix) == 0 ||
           nrow(counts_matrix) == 0) {
@@ -100,7 +99,8 @@ for (patient_id in patients) {
   # Calculate the percentage of mitochondrial genes
   mitochondrial_genes <-
     grep("^MT-",
-         rownames(GetAssayData(seurat_object, assay = "RNA", slot = "counts")),
+         rownames(GetAssayData(seurat_object, assay = "RNA",
+                               layer = "counts")),
          value = TRUE)
   seurat_object[["percent.mt"]] <-
     PercentageFeatureSet(seurat_object, features = mitochondrial_genes)
@@ -119,18 +119,18 @@ patient_data_list <- lapply(patient_data_list, function(x) {
 })
 
 # Adjusted the loop to print validation status once per patient dataset
-lapply(names(patient_data_list), function(patient_id) {
+invisible(lapply(names(patient_data_list), function(patient_id) {
   seurat_object <- patient_data_list[[patient_id]]
   if ("RNA" %in% names(seurat_object@assays) &&
         ncol(GetAssayData(seurat_object, assay = "RNA",
-                          slot = "counts")) > 0) {
+                          layer = "counts")) > 0) {
     message(paste("Seurat object for patient", patient_id,
                   "is ready for integration."))
   } else {
     stop(paste("Seurat object for patient", patient_id,
                "is not ready for integration."))
   }
-})
+}))
 
 # Prepare for integration
 patient_data_list <-
@@ -175,6 +175,7 @@ cat("UMAP plot saved to:", umap_plot_path, "\n")
 # Step 3: Clustering and Identifying Regulatory Networks
 # ========================================================
 
+# Find neighbors and clusters
 integrated_data <- FindNeighbors(integrated_data, dims = 1:20)
 integrated_data <- FindClusters(integrated_data, resolution = 0.5)
 
@@ -188,12 +189,13 @@ umap_cluster_plot_path <-
   file.path(plot_output_path, "umap_clustering_results.png")
 ggsave(umap_cluster_plot_path, plot = p, width = 10, height = 8)
 
-# Identify top genes per cluster if needed for the heatmap
+# Verify the RNA assay and set it as the default
 if ("RNA" %in% names(integrated_data@assays)) {
   DefaultAssay(integrated_data) <- "RNA"
-  # Extremely lenient thresholds to try capturing any differences
+
+  # Find top genes per cluster with extremely lenient thresholds
   top_genes <- FindAllMarkers(integrated_data, only.pos = TRUE, min.pct = 0.1,
-                              logfc.threshold = 0.1)
+                              logfc.threshold = 0.5, test.use = "wilcox")
 
   if (nrow(top_genes) > 0) {
     # Group and select top 5 genes per cluster by log fold change
@@ -203,9 +205,9 @@ if ("RNA" %in% names(integrated_data@assays)) {
 
     if (nrow(top_genes) > 0) {
       gene_list <- top_genes$gene
-      # Ensure gene_list contains valid gene names present in the dataset
       data_matrix <-
-        GetAssayData(integrated_data, slot = "data")[gene_list, , drop = FALSE]
+        GetAssayData(integrated_data,
+                     layer = "data")[gene_list, , drop = FALSE]
 
       if (!is.null(data_matrix) && ncol(data_matrix) > 0 &&
             length(gene_list) == nrow(data_matrix)) {
@@ -242,9 +244,8 @@ DefaultAssay(integrated_data) <- "SCT"
 
 # Try to access the normalized data from the SCT assay
 if ("SCT" %in% names(integrated_data@assays)) {
-  # Accessing normalized data (this should work for SCTransform output)
   counts_matrix <-
-    GetAssayData(object = integrated_data, assay = "SCT", slot = "data")
+    GetAssayData(object = integrated_data, assay = "SCT", layer = "data")
   if (is.null(counts_matrix) || ncol(counts_matrix) == 0 ||
         nrow(counts_matrix) == 0) {
     stop(paste0("Normalized data matrix is empty or NULL.",
@@ -263,7 +264,6 @@ metacell_matrices <- make_cmfa(dat_mat = counts_matrix,
                                out_dir = base_output_path,
                                out_name = "metacell")
 
-# Assuming metacell_matrices have been created as shown
 if (length(metacell_matrices) > 0) {
   # Prepare and save the expression data for each cluster
   expression_files <-
@@ -481,7 +481,7 @@ if (nrow(top_genes) < length(unique(valid_clusters$cluster)) * 5) {
   }
 
   # Attempt the heatmap plot if the gene list is correct
-  gene_data <- GetAssayData(integrated_data, slot = "data")
+  gene_data <- GetAssayData(integrated_data, layer = "data")
   if (any(!top_genes$gene %in% rownames(gene_data))) {
     cat("Some genes in top_genes not found in the data matrix.\n")
   } else {
