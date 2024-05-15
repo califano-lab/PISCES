@@ -17,6 +17,7 @@ library(ggplot2)
 library(scales)
 library(ggrepel)
 library(plyr)
+library(celldex)
 
 #' Plot a heatmap of custom gene list grouped by cluster
 #'
@@ -320,18 +321,18 @@ compute_silhouette_width <- function(clustering, distance_matrix) {
 #' @param numCores              Number of cores to use for parallel processing.
 #'
 #' @return                      A combined SingleR object created from chunks.
-create_big_single_r_object_v2 <- function(counts, annot = NULL, project_name,
-                                          xy, clusters, n = 10000,
-                                          min_genes = 200, technology = "10X",
-                                          species = "Human", citation = "",
-                                          ref_list = list(),
-                                          normalize_gene_length = FALSE,
-                                          variable_genes = "de",
-                                          fine_tune = TRUE,
-                                          reduce_file_size = TRUE,
-                                          do_signatures = FALSE,
-                                          do_main_types = TRUE,
-                                          temp_dir = getwd(), num_cores = 1) {
+create_big_single_r_object <- function(counts, annot = NULL, project_name,
+                                       xy, clusters, n = 10000,
+                                       min_genes = 200, technology = "10X",
+                                       species = "Human", citation = "",
+                                       ref_list = list(),
+                                       normalize_gene_length = FALSE,
+                                       variable_genes = "de",
+                                       fine_tune = TRUE,
+                                       reduce_file_size = TRUE,
+                                       do_signatures = FALSE,
+                                       do_main_types = TRUE,
+                                       temp_dir = getwd(), num_cores = 1) {
   setup_temp_dir(temp_dir, project_name)
   cell_indices <- split_into_chunks(ncol(counts), n)
 
@@ -1151,23 +1152,19 @@ weighted_sum_z_scores <- function(z_scores, weights) {
 
 ### $$$$$$$$$$$$$ Some new $$$$$$$$$$$$$ ###
 
-# Function to load and process patient data
+# Function to load patient data
 load_patient_data <- function(patient, base_path, analysis_prefix,
                               count_default_suffix, output_folder_suffix,
-                              feature_matrix_dir, verbose = TRUE) {
+                              feature_matrix_dir) {
   patient_id <- patient$id
   patient_type <- patient$type
-  
+
   data_dir <- construct_data_dir(base_path, patient_id, analysis_prefix,
                                  count_default_suffix, output_folder_suffix,
                                  feature_matrix_dir)
   data <- Read10X(data.dir = data_dir)
-  
+
   seurat_object <- create_seurat_object(data, patient_id, patient_type)
-  seurat_object <- calculate_percent_mt(seurat_object)
-  seurat_object <- filter_cells(seurat_object)
-  seurat_object <- normalize_data(seurat_object, verbose = verbose)
-  
   return(seurat_object)
 }
 
@@ -1187,6 +1184,30 @@ create_seurat_object <- function(data, patient_id, patient_type) {
   seurat_object <- RenameCells(seurat_object, add.cell.id = patient_id)
   seurat_object$patient <- patient_id
   seurat_object$type <- patient_type
+  return(seurat_object)
+}
+
+# Function to process patient data
+process_patient_data <- function(seurat_object, verbose = TRUE,
+                                 blueprint_encode) {
+  # Calculate the percentage of mitochondrial genes
+  seurat_object <- calculate_percent_mt(seurat_object)
+
+  # Filter cells based on mitochondrial content and RNA count
+  seurat_object <- filter_cells(seurat_object)
+
+  # Normalize and stabilize variance using SCTransform
+  seurat_object <- normalize_data(seurat_object, verbose = verbose)
+
+  # Create SingleR object using the SingleR function
+  singler_results <- SingleR(test = seurat_object[["SCT"]]@data,
+                             ref = blueprint_encode,
+                             labels = blueprint_encode$label.main)
+
+  # Add blueprint labels and p-values to the Seurat object
+  seurat_object$blueprint_labels <- singler_results$labels
+  seurat_object$blueprint_pvals <- singler_results$scores
+
   return(seurat_object)
 }
 

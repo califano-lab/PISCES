@@ -37,12 +37,12 @@ if (!dir.exists(plot_output_path)) {
 
 ################## DEFINE OTHER PREFERENCES #####################
 
-my_verbose <- TRUE
+my_verbose <- FALSE
 
 #################################################################
 
 # ========================================================
-# Step 1: Load Data
+# Step 1: Load and process data
 # ========================================================
 
 # Define patient information
@@ -64,17 +64,41 @@ feature_matrix_dir <- "filtered_feature_bc_matrix"
 # Load data for each patient
 patient_data_list <- lapply(patients, function(patient) {
   tryCatch({
-    message("Processing patient: ", patient$id)
+    message("Loading patient: ", patient$id)
     seurat_obj <- load_patient_data(patient, base_path, analysis_prefix,
                                     count_default_suffix, output_folder_suffix,
-                                    feature_matrix_dir, my_verbose)
-    message("Completed processing for patient: ", patient$id)
+                                    feature_matrix_dir)
+    message("Completed loading for patient: ", patient$id)
     return(seurat_obj)
   }, error = function(e) {
-    message("Error processing patient: ", patient$id, ": ", e$message)
+    message("Error loading patient: ", patient$id, ": ", e$message)
     return(NULL)
   })
 })
+
+message("Finished loading patient data.")
+
+# Filter out any NULL values that resulted from errors
+patient_data_list <- Filter(Negate(is.null), patient_data_list)
+
+blueprint_encode <- BlueprintEncodeData()
+
+patient_data_list <- lapply(patient_data_list, function(p) {
+  patient_id <- unique(p$patient)
+  tryCatch({
+    message("Processing Seurat object for patient: ", patient_id)
+    p <- process_patient_data(p, my_verbose, blueprint_encode)
+    message("Completed processing Seurat object for patient: ", patient_id)
+    return(p)
+  }, error = function(e) {
+    message("Error processing Seurat object for patient: ",
+            patient_id, ": ", e$message)
+    return(NULL)
+  })
+})
+
+
+message("Finished processing patient data.")
 
 # Filter out any NULL values that resulted from errors
 patient_data_list <- Filter(Negate(is.null), patient_data_list)
