@@ -29,94 +29,59 @@ aracne_binary_path <- paste0("/Users/apple/Documents/Research/aleks-lab/",
                              "repos/ARACNe3/build/src/app/",
                              "ARACNe3_app_release")
 
+# Create the directory if it does not exist
+if (!dir.exists(plot_output_path)) {
+  dir.create(plot_output_path, recursive = TRUE)
+}
+#################################################################
+
+################## DEFINE OTHER PREFERENCES #####################
+
+my_verbose <- FALSE
+
 #################################################################
 
 # ========================================================
 # Step 1: Load Data
 # ========================================================
 
-# Create the directory if it does not exist
-if (!dir.exists(plot_output_path)) {
-  dir.create(plot_output_path, recursive = TRUE)
-}
+# Define patient information
+patients <- list(
+  list(id = "JD001", type = "Early"),
+  list(id = "JD002", type = "Early"),
+  list(id = "JD003", type = "Late"),
+  list(id = "JD004", type = "Late"),
+  list(id = "JD005", type = "Early"),
+  list(id = "JD006", type = "Late")
+)
 
-# Define a list of transcription factors relevant to colorectal cancer
-transcription_factors <- c("APC", "TP53", "KRAS", "PIK3CA", "SMAD4")
+# Define constants for the data path construction
+analysis_prefix <- "JOEL_DAVID_6_HUMAN_10X-"
+count_default_suffix <- "-cellranger-count-default"
+output_folder_suffix <- "_cellranger_count_outs"
+feature_matrix_dir <- "filtered_feature_bc_matrix"
 
-# Path for regulators file
-regulators_file_path <- paste0(base_output_path, "/regulators.txt")
+# Load data for each patient
+patient_data_list <- lapply(patients, function(patient) {
+  tryCatch({
+    message("Processing patient: ", patient$id)
+    seurat_obj <- load_patient_data(patient, base_path, analysis_prefix,
+                                    count_default_suffix, output_folder_suffix,
+                                    feature_matrix_dir, my_verbose)
+    message("Completed processing for patient: ", patient$id)
+    return(seurat_obj)
+  }, error = function(e) {
+    message("Error processing patient: ", patient$id, ": ", e$message)
+    return(NULL)
+  })
+})
 
-# Save transcription factors to regulators.txt
-writeLines(transcription_factors, con = regulators_file_path)
-
-# Optionally, create a more detailed regulators list if needed
-regulators_list_path <- paste0(base_output_path, "/regulators_list.txt")
-writeLines(transcription_factors, con = regulators_list_path)
-
-# Patient identifiers
-patients <- c("JD001", "JD002", "JD003", "JD004", "JD005", "JD006")
-
-# Empty list to store Seurat objects
-patient_data_list <- list()
-
-for (patient_id in patients) {
-  # Dynamically generate names based on patient ID
-  analysis_name <- paste("JOEL_DAVID_6_HUMAN_10X-", patient_id,
-                         "-cellranger-count-default", sep = "")
-  output_folder_name <- paste(patient_id, "cellranger_count_outs", sep = "_")
-
-  # Construct the full path to the filtered feature matrix directory
-  data_dir <- file.path(base_path, patient_id, "analysis", analysis_name,
-                        output_folder_name, "filtered_feature_bc_matrix")
-
-  # Read the data
-  data <- Read10X(data.dir = data_dir)
-
-  # Create a Seurat object
-  seurat_object <- CreateSeuratObject(counts = data, min.features = 200,
-                                      min.cells = 50)
-  seurat_object <- RenameCells(seurat_object, add.cell.id = patient_id)
-  seurat_object$patient <- patient_id
-
-  # Check if the RNA assay is correctly loaded
-  if ("RNA" %in% names(seurat_object@assays)) {
-    # Extract and check the counts matrix using GetAssayData
-    counts_matrix <-
-      GetAssayData(object = seurat_object, assay = "RNA", layer = "counts")
-    if (is.null(counts_matrix) ||
-          ncol(counts_matrix) == 0 ||
-          nrow(counts_matrix) == 0) {
-      stop(paste0("Counts matrix is empty or NULL.",
-                  "Check your Seurat object and data extraction steps."))
-    } else {
-      print(paste("Counts matrix dimensions:", nrow(counts_matrix),
-                  "genes X", ncol(counts_matrix), "cells"))
-    }
-  } else {
-    stop("RNA assay not found in the Seurat object.")
-  }
-
-  # Calculate the percentage of mitochondrial genes
-  mitochondrial_genes <-
-    grep("^MT-",
-         rownames(GetAssayData(seurat_object, assay = "RNA",
-                               layer = "counts")),
-         value = TRUE)
-  seurat_object[["percent.mt"]] <-
-    PercentageFeatureSet(seurat_object, features = mitochondrial_genes)
-
-  patient_data_list[[patient_id]] <- seurat_object
-}
+# Filter out any NULL values that resulted from errors
+patient_data_list <- Filter(Negate(is.null), patient_data_list)
 
 # ========================================================
 # Step 2: Data Integration and Batch Correction
 # ========================================================
-
-# Normalize and stabilize variance using SCTransform
-patient_data_list <- lapply(patient_data_list, function(x) {
-  x <- SCTransform(x, verbose = FALSE)
-  return(x)
-})
 
 # Adjusted the loop to print validation status once per patient dataset
 invisible(lapply(names(patient_data_list), function(patient_id) {

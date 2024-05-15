@@ -1148,3 +1148,71 @@ normalize_weights <- function(weights) {
 weighted_sum_z_scores <- function(z_scores, weights) {
   sum(z_scores * weights)
 }
+
+### $$$$$$$$$$$$$ Some new $$$$$$$$$$$$$ ###
+
+# Function to load and process patient data
+load_patient_data <- function(patient, base_path, analysis_prefix,
+                              count_default_suffix, output_folder_suffix,
+                              feature_matrix_dir, verbose = TRUE) {
+  patient_id <- patient$id
+  patient_type <- patient$type
+  
+  data_dir <- construct_data_dir(base_path, patient_id, analysis_prefix,
+                                 count_default_suffix, output_folder_suffix,
+                                 feature_matrix_dir)
+  data <- Read10X(data.dir = data_dir)
+  
+  seurat_object <- create_seurat_object(data, patient_id, patient_type)
+  seurat_object <- calculate_percent_mt(seurat_object)
+  seurat_object <- filter_cells(seurat_object)
+  seurat_object <- normalize_data(seurat_object, verbose = verbose)
+  
+  return(seurat_object)
+}
+
+# Function to construct the data directory path
+construct_data_dir <- function(base_path, patient_id, analysis_prefix,
+                               count_default_suffix, output_folder_suffix,
+                               feature_matrix_dir) {
+  file.path(base_path, patient_id, "analysis",
+            paste0(analysis_prefix, patient_id, count_default_suffix),
+            paste0(patient_id, output_folder_suffix), feature_matrix_dir)
+}
+
+# Function to create a Seurat object and add metadata
+create_seurat_object <- function(data, patient_id, patient_type) {
+  seurat_object <- CreateSeuratObject(counts = data, min.features = 200,
+                                      min.cells = 50)
+  seurat_object <- RenameCells(seurat_object, add.cell.id = patient_id)
+  seurat_object$patient <- patient_id
+  seurat_object$type <- patient_type
+  return(seurat_object)
+}
+
+# Function to calculate the percentage of mitochondrial genes
+calculate_percent_mt <- function(seurat_object) {
+  mitochondrial_genes <- grep("^MT-", rownames(seurat_object), value = TRUE)
+  seurat_object[["percent.mt"]] <-
+    PercentageFeatureSet(seurat_object, features = mitochondrial_genes)
+  return(seurat_object)
+}
+
+# Function to filter cells based on mitochondrial content and RNA count
+filter_cells <- function(seurat_object, mt_threshold = 25, min_rna = 1000,
+                         max_rna = 15000) {
+  seurat_object <-
+    subset(seurat_object,
+           subset = percent.mt < mt_threshold &
+             nCount_RNA > min_rna & nCount_RNA < max_rna)
+  return(seurat_object)
+}
+
+# Function to normalize and stabilize variance using SCTransform
+normalize_data <- function(seurat_object, verbose = FALSE) {
+  seurat_object <-
+    SCTransform(seurat_object, vars.to.regress = c("nCount_RNA", "percent.mt"),
+                return.only.var.genes = FALSE, verbose = verbose,
+                conserve.memory = TRUE)
+  return(seurat_object)
+}
