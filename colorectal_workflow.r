@@ -37,7 +37,7 @@ if (!dir.exists(plot_output_path)) {
 
 ################## DEFINE OTHER PREFERENCES #####################
 
-my_verbose <- FALSE
+my_verbose <- TRUE
 
 #################################################################
 
@@ -83,7 +83,7 @@ patient_data_list <- Filter(Negate(is.null), patient_data_list)
 # Step 2: Data Integration and Batch Correction
 # ========================================================
 
-# Adjusted the loop to print validation status once per patient dataset
+# Check if Seurat objects are ready for integration
 invisible(lapply(names(patient_data_list), function(patient_id) {
   seurat_object <- patient_data_list[[patient_id]]
   if ("RNA" %in% names(seurat_object@assays) &&
@@ -97,24 +97,41 @@ invisible(lapply(names(patient_data_list), function(patient_id) {
   }
 }))
 
-# Prepare for integration
-patient_data_list <-
-  PrepSCTIntegration(object.list = patient_data_list, verbose = TRUE)
-
 # Identify integration anchors using only the common features
 features_to_integrate <-
-  SelectIntegrationFeatures(object.list = patient_data_list, nfeatures = 2000)
-anchors <-
-  FindIntegrationAnchors(object.list = patient_data_list,
-                         anchor.features = features_to_integrate,
-                         dims = 1:20,
-                         normalization.method = "SCT",
-                         verbose = TRUE)
+  SelectIntegrationFeatures(object.list = patient_data_list, nfeatures = 4000)
 
-# Integrate data using the identified anchors
-integrated_data <-
-  IntegrateData(anchorset = anchors, normalization.method = "SCT",
-                dims = 1:20, verbose = TRUE)
+# Prepare for integration
+patient_data_list <-
+  PrepSCTIntegration(object.list = patient_data_list,
+                     anchor.features = features_to_integrate,
+                     verbose = my_verbose)
+
+patient_data_list <- lapply(patient_data_list, FUN = RunPCA,
+                            features = features_to_integrate)
+
+anchors <- FindIntegrationAnchors(object.list = patient_data_list,
+                                  anchor.features = features_to_integrate,
+                                  dims = 1:30, normalization.method = "SCT",
+                                  reduction = "rpca", k.anchor = 20,
+                                  verbose = my_verbose, reference = 1)
+
+# Clean up memory by removing temporary objects
+rm(patient_data_list, features_to_integrate)
+
+integrated_data <- IntegrateData(anchorset = anchors,
+                                 normalization.method = "SCT", dims = 1:30,
+                                 verbose = my_verbose)
+
+# Clean up memory by removing anchors
+rm(anchors)
+
+integrated_data$type <- factor(integrated_data$type,
+                               levels = c("Early", "Late"))
+
+# ========================================================
+# Step 3: Clustering and Identifying Regulatory Networks
+# ========================================================
 
 # Running PCA on the integrated data to enable visualization and
 # further analysis
@@ -136,9 +153,7 @@ umap_plot_path <- file.path(plot_output_path, "umap_integration_results.png")
 ggsave(umap_plot_path, plot = p, width = 10, height = 8)
 cat("UMAP plot saved to:", umap_plot_path, "\n")
 
-# ========================================================
-# Step 3: Clustering and Identifying Regulatory Networks
-# ========================================================
+
 
 # Find neighbors and clusters
 integrated_data <- FindNeighbors(integrated_data, dims = 1:20)
