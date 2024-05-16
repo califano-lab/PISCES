@@ -40,10 +40,6 @@ library(celldex)
 gene_heatmap_plot <- function(dat, clust, genes, genes_by_cluster = TRUE,
                               n_top_genes_per_cluster = 5, color_palette = NULL,
                               scaled = FALSE) {
-  # Check if data is sufficient
-  if (is.null(dat) || length(genes) != nrow(dat)) {
-    stop("Data is not sufficient or gene list does not match data dimensions.")
-  }
 
   if (length(unique(clust)) == 0) {
     stop("No valid cluster data found.")
@@ -57,6 +53,11 @@ gene_heatmap_plot <- function(dat, clust, genes, genes_by_cluster = TRUE,
   i <- sample(seq_len(ncol(dat)), min(10000, ncol(dat)), replace = FALSE)
   x <- dat[genes, i]
 
+  # Validate dimensions after subsetting
+  if (nrow(x) != length(genes)) {
+    stop("Subset data dimensions do not match the number of genes.")
+  }
+
   # Prepare cluster data frame
   df <- data.frame(cluster = clust[i])
   rownames(df) <- colnames(x)
@@ -66,29 +67,16 @@ gene_heatmap_plot <- function(dat, clust, genes, genes_by_cluster = TRUE,
 
   # Apply scaling if needed
   if (!scaled) {
-    t <- apply(x, 1, calculate_z_score)
-  } else {
-    t <- x
+    x <- apply(x, 1, calculate_z_score)
   }
 
   # Generate breaks and annotations
-  mat_breaks <- generate_mat_breaks(t)
+  mat_breaks <- generate_mat_breaks(x)
   annotations <- generate_annotations(df, my_color_palette, genes_by_cluster,
                                       n_top_genes_per_cluster)
 
-  # Inside gene_heatmap_plot, ensure no mismatch in dimensions
-  if (nrow(x) != length(genes)) {
-    stop("Mismatch: Check gene & cluster counts.")
-  }
-
-  # Validate gaps
-  expected_rows <- length(identities) * n_top_genes_per_cluster
-  if (nrow(t) != expected_rows) {
-    stop("Mismatch: Check gene & cluster counts.")
-  }
-
   # Configure pheatmap arguments
-  pheatmap_args <- list(t, cluster_rows = FALSE, show_rownames = TRUE,
+  pheatmap_args <- list(x, cluster_rows = FALSE, show_rownames = TRUE,
                         cluster_cols = FALSE, annotation_col = df,
                         breaks = mat_breaks,
                         color = colorRampPalette(c("blue",
@@ -264,12 +252,10 @@ sample_cells <- function(mat, num_cells) {
 #' @return        A distance matrix.
 compute_distance_matrix <- function(dat_mat) {
   if (!is.matrix(dat_mat)) {
-    print("Converting dat_mat to a matrix")
     dat_mat <- as.matrix(dat_mat)
   }
 
   dist_mat <- as.dist(1 - cor(dat_mat, method = "pearson"))
-  print(paste("Distance matrix dimensions:", dim(dist_mat)))
   return(dist_mat)
 }
 

@@ -154,113 +154,95 @@ integrated_data$type <- factor(integrated_data$type,
                                levels = c("Early", "Late"))
 
 # ========================================================
-# Step 3: Clustering and Identifying Regulatory Networks
+# Step 3: Clustering
 # ========================================================
 
-# Running PCA on the integrated data to enable visualization and
-# further analysis
-integrated_data <- RunPCA(integrated_data, verbose = TRUE)
+# Running PCA on the integrated data
+integrated_data <-
+  RunPCA(integrated_data,
+         features = VariableFeatures(object = integrated_data))
 
 # Generate a UMAP reduction for visualization
-integrated_data <- RunUMAP(integrated_data, reduction = "pca", dims = 1:20)
-
-p <- DimPlot(integrated_data, reduction = "umap", group.by = "patient",
-             label = TRUE) +
-  ggtitle("UMAP Visualization of Integrated Single-cell Data") +
-  scale_color_viridis_d() +
-  theme(legend.position = "right")
-
-# Define the path and filename for the UMAP plot
-umap_plot_path <- file.path(plot_output_path, "umap_integration_results.png")
-
-# Save the UMAP plot
-ggsave(umap_plot_path, plot = p, width = 10, height = 8)
-cat("UMAP plot saved to:", umap_plot_path, "\n")
-
-
+integrated_data <- RunUMAP(integrated_data, dims = 1:50, verbose = my_verbose)
 
 # Find neighbors and clusters
-integrated_data <- FindNeighbors(integrated_data, dims = 1:20)
-integrated_data <- FindClusters(integrated_data, resolution = 0.5)
+integrated_data <-
+  FindNeighbors(integrated_data, dims = 1:50, verbose = my_verbose)
+integrated_data <-
+  FindClusters(integrated_data, resolution = seq(0.1, 1, by = 0.1),
+               verbose = my_verbose, algorithm = 1)
+
+# Calculate silhouette scores to determine the best resolution parameter
+clust <-
+  integrated_data@meta.data[, grepl("integrated_snn_res.",
+                                    colnames(integrated_data@meta.data))]
+mat <- as.data.frame(t(integrated_data$pca@cell.embeddings))
+out <- sil_subsample(mat, clust)
+means <- out[[1]]
+sd <- out[[2]]
+x <- seq(0.1, 1, by = 0.1)
+errbar(x, means, means + sd, means - sd, ylab = "mean silhouette score",
+       xlab = "resolution parameter")
+lines(x, means)
+best <- tail(x[which(means == max(means))], n = 1)
+best <- 0.5  # Fallback if the best resolution is not found
+legend("topright", paste("Best", best, sep = " = "))
+integrated_data$seurat_clusters <-
+  integrated_data@meta.data[, paste("integrated_snn_res.", best, sep = "")]
+Idents(integrated_data) <- "seurat_clusters"
+
+# Rename clusters based on predefined labels
+cluster_labels <- c("CD8 T-cell", "CD4 T-cell 1", "Plasma Cells", "Tumor.1",
+                    "Tumor.2", "Tumor.3", "Tregs", "B-cells", "Myeloid",
+                    "Endothelial", "Fibroblast", "Tumor.4", "CD4 T-cell 2",
+                    "Misc")
+integrated_data$seurat_clusters <-
+  mapvalues(integrated_data$seurat_clusters,
+            from = 1:length(unique(integrated_data$seurat_clusters)) - 1,
+            to = cluster_labels)
+Idents(integrated_data) <- "seurat_clusters"
 
 # UMAP plot of clusters
-p <- DimPlot(integrated_data, reduction = "umap",
-             group.by = "seurat_clusters") +
-  ggtitle("UMAP Clustering Results")
-
-# Define path for saving the UMAP plot
+p <- DimPlot(integrated_data, reduction = "umap", group.by = "seurat_clusters",
+             label = TRUE, label.size = 7, repel = TRUE) + NoLegend()
 umap_cluster_plot_path <-
   file.path(plot_output_path, "umap_clustering_results.png")
 ggsave(umap_cluster_plot_path, plot = p, width = 10, height = 8)
 
-# Verify the RNA assay and set it as the default
-if ("RNA" %in% names(integrated_data@assays)) {
-  DefaultAssay(integrated_data) <- "RNA"
+# Find top genes per cluster
+top_genes <- FindAllMarkers(integrated_data, only.pos = TRUE, min.pct = 0.1,
+                            logfc.threshold = 0.5, test.use = "wilcox")
+top_genes <- top_genes %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
 
-  # Find top genes per cluster with extremely lenient thresholds
-  top_genes <- FindAllMarkers(integrated_data, only.pos = TRUE, min.pct = 0.1,
-                              logfc.threshold = 0.5, test.use = "wilcox")
+# Generate heatmap for top genes
+gene_heatmap_plot(
+  GetAssayData(integrated_data, assay = "SCT", layer = "scale.data"),
+  integrated_data$seurat_clusters,
+  top_genes$gene, n_top_genes_per_cluster = 5, scaled = FALSE
+)
 
-  if (nrow(top_genes) > 0) {
-    # Group and select top 5 genes per cluster by log fold change
-    top_genes <- top_genes %>%
-      dplyr::group_by(cluster) %>%
-      dplyr::top_n(n = 5, wt = avg_log2FC)
+# Refine labels based on blueprint labels and p-values
+l <- integrated_data$blueprint_labels
+l[integrated_data$blueprint_pvals > 0.1] <- NA
+l[l %in% names(which(table(l) < 50))] <- NA
+integrated_data$l <- l
 
-    if (nrow(top_genes) > 0) {
-      gene_list <- top_genes$gene
-      data_matrix <-
-        GetAssayData(integrated_data,
-                     layer = "data")[gene_list, , drop = FALSE]
+# Plot UMAP with refined labels
+p <- DimPlot(integrated_data, reduction = "umap", label = TRUE,
+             repel = TRUE, label.size = 5, group.by = "l") + NoLegend()
+ggsave(file.path(plot_output_path, "umap_refined_labels.png"),
+       plot = p, width = 10, height = 8)
 
-      if (!is.null(data_matrix) && ncol(data_matrix) > 0 &&
-            length(gene_list) == nrow(data_matrix)) {
-        # Generate heatmap
-        heatmap_plot <-
-          gene_heatmap_plot(data_matrix,
-                            integrated_data@meta.data$seurat_clusters,
-                            genes = gene_list, genes_by_cluster = TRUE,
-                            n_top_genes_per_cluster = 5, scaled = TRUE)
+# Save the integrated data
+saveRDS(integrated_data,
+        file = file.path(base_output_path, "colorectal_integrated.rds"))
 
-        # Save the heatmap
-        heatmap_plot_path <-
-          file.path(plot_output_path, "gene_expression_heatmap.png")
-        ggsave(heatmap_plot_path, plot = heatmap_plot, width = 10, height = 8)
-      } else {
-        message(paste0("Heatmap data matrix is not valid for plotting.",
-                       " Check gene list and data matrix dimensions."))
-      }
-    } else {
-      message(paste0("Not enough significant markers",
-                     " found after grouping by cluster."))
-    }
-  } else {
-    message(paste0("No significant markers found across any clusters.",
-                   " Consider adjusting the thresholds or revising",
-                   " the clustering approach."))
-  }
-} else {
-  message("RNA assay not found in the dataset.")
-}
 
-# Ensure the SCT assay is set as default if it's being used
-DefaultAssay(integrated_data) <- "SCT"
 
-# Try to access the normalized data from the SCT assay
-if ("SCT" %in% names(integrated_data@assays)) {
-  counts_matrix <-
-    GetAssayData(object = integrated_data, assay = "SCT", layer = "data")
-  if (is.null(counts_matrix) || ncol(counts_matrix) == 0 ||
-        nrow(counts_matrix) == 0) {
-    stop(paste0("Normalized data matrix is empty or NULL.",
-                "Check your Seurat object and data extraction steps."))
-  } else {
-    print(paste("Normalized data matrix dimensions:", nrow(counts_matrix),
-                "genes X", ncol(counts_matrix), "cells"))
-  }
-} else {
-  stop("SCT assay not found in the integrated Seurat object.")
-}
+# $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+
+
 
 # Call the function with the correctly obtained counts matrix
 metacell_matrices <- make_cmfa(dat_mat = counts_matrix,
