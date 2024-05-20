@@ -42,7 +42,7 @@ my_verbose <- FALSE
 #################################################################
 
 # ========================================================
-# Step 1: Load and process data
+# Step 1: Load and preprocess data
 # ========================================================
 
 # Define patient information
@@ -61,192 +61,162 @@ count_default_suffix <- "-cellranger-count-default"
 output_folder_suffix <- "_cellranger_count_outs"
 feature_matrix_dir <- "filtered_feature_bc_matrix"
 
-# Load data for each patient
-patient_data_list <- lapply(patients, function(patient) {
+# Load data for each patient into separate Seurat objects
+patient_seurat_list <- lapply(patients, function(patient) {
   tryCatch({
     message("Loading patient: ", patient$id)
-    seurat_obj <- load_patient_data(patient, base_path, analysis_prefix,
-                                    count_default_suffix, output_folder_suffix,
-                                    feature_matrix_dir)
+    seurat_obj <- load_into_seurat(patient, base_path, analysis_prefix,
+                                   count_default_suffix, output_folder_suffix,
+                                   feature_matrix_dir)
     message("Completed loading for patient: ", patient$id)
     return(seurat_obj)
   }, error = function(e) {
-    message("Error loading patient: ", patient$id, ": ", e$message)
-    return(NULL)
+    stop("Error loading patient: ", patient$id, ": ", e$message)
   })
 })
 
-message("Finished loading patient data.")
-
-# Filter out any NULL values that resulted from errors
-patient_data_list <- Filter(Negate(is.null), patient_data_list)
+message("Finished loading patient data into Seurat objects.")
 
 blueprint_encode <- BlueprintEncodeData()
 
-patient_data_list <- lapply(patient_data_list, function(p) {
+patient_seurat_list <- lapply(patient_seurat_list, function(p) {
   patient_id <- unique(p$patient)
   tryCatch({
-    message("Processing Seurat object for patient: ", patient_id)
-    p <- process_patient_data(p, my_verbose, blueprint_encode)
-    message("Completed processing Seurat object for patient: ", patient_id)
+    message("Preprocessing Seurat object for patient: ", patient_id)
+    p <- preprocess_seurat(p, my_verbose, blueprint_encode)
+    message("Completed preprocessing Seurat object for patient: ", patient_id)
     return(p)
   }, error = function(e) {
-    message("Error processing Seurat object for patient: ",
-            patient_id, ": ", e$message)
-    return(NULL)
+    stop("Error preprocessing Seurat object for patient: ",
+         patient_id, ": ", e$message)
   })
 })
 
-
-message("Finished processing patient data.")
-
-# Filter out any NULL values that resulted from errors
-patient_data_list <- Filter(Negate(is.null), patient_data_list)
+message("Finished preprocessing seurat object(s).")
 
 # ========================================================
 # Step 2: Data Integration and Batch Correction
 # ========================================================
 
 # Check if Seurat objects are ready for integration
-invisible(lapply(names(patient_data_list), function(patient_id) {
-  seurat_object <- patient_data_list[[patient_id]]
-  if ("RNA" %in% names(seurat_object@assays) &&
-        ncol(GetAssayData(seurat_object, assay = "RNA",
-                          layer = "counts")) > 0) {
-    message(paste("Seurat object for patient", patient_id,
-                  "is ready for integration."))
-  } else {
-    stop(paste("Seurat object for patient", patient_id,
-               "is not ready for integration."))
-  }
-}))
+is_seurat_ready_integration(patient_seurat_list, patients)
 
 # Identify integration anchors using only the common features
 features_to_integrate <-
-  SelectIntegrationFeatures(object.list = patient_data_list, nfeatures = 4000)
+  SelectIntegrationFeatures(object.list = patient_seurat_list,
+                            nfeatures = 4000)
 
 # Prepare for integration
-patient_data_list <-
-  PrepSCTIntegration(object.list = patient_data_list,
+patient_seurat_list <-
+  PrepSCTIntegration(object.list = patient_seurat_list,
                      anchor.features = features_to_integrate,
                      verbose = my_verbose)
 
-patient_data_list <- lapply(patient_data_list, FUN = RunPCA,
-                            features = features_to_integrate)
+# Run PCA on each Seurat object
+patient_seurat_list <- lapply(patient_seurat_list, function(seurat_obj) {
+  RunPCA(seurat_obj, features = features_to_integrate, verbose = my_verbose)
+})
 
-anchors <- FindIntegrationAnchors(object.list = patient_data_list,
+anchors <- FindIntegrationAnchors(object.list = patient_seurat_list,
                                   anchor.features = features_to_integrate,
                                   dims = 1:30, normalization.method = "SCT",
                                   reduction = "rpca", k.anchor = 20,
                                   verbose = my_verbose, reference = 1)
 
 # Clean up memory by removing temporary objects
-rm(patient_data_list, features_to_integrate)
+rm(patient_seurat_list, features_to_integrate)
 
-integrated_data <- IntegrateData(anchorset = anchors,
-                                 normalization.method = "SCT", dims = 1:30,
-                                 verbose = my_verbose)
+#' @todo Ask doctor about the warnings here
+integrated_seurat <- IntegrateData(anchorset = anchors,
+                                   normalization.method = "SCT", dims = 1:30,
+                                   verbose = my_verbose)
 
 # Clean up memory by removing anchors
 rm(anchors)
 
-integrated_data$type <- factor(integrated_data$type,
-                               levels = c("Early", "Late"))
+integrated_seurat$type <- factor(integrated_seurat$type,
+                                 levels = c("Early", "Late"))
 
 # ========================================================
 # Step 3: Clustering
 # ========================================================
 
-# Running PCA on the integrated data
-integrated_data <-
-  RunPCA(integrated_data,
-         features = VariableFeatures(object = integrated_data))
+# Run PCA
+integrated_seurat <-
+  RunPCA(integrated_seurat,
+         features = VariableFeatures(object = integrated_seurat))
 
-# Generate a UMAP reduction for visualization
-integrated_data <- RunUMAP(integrated_data, dims = 1:50, verbose = my_verbose)
+# Run UMAP
+integrated_seurat <-
+  RunUMAP(integrated_seurat, dims = 1:50, verbose = my_verbose)
+
+# Find neighbors
+integrated_seurat <-
+  FindNeighbors(integrated_seurat, dims = 1:50, verbose = my_verbose)
 
 # Find neighbors and clusters
-integrated_data <-
-  FindNeighbors(integrated_data, dims = 1:50, verbose = my_verbose)
-integrated_data <-
-  FindClusters(integrated_data, resolution = seq(0.1, 1, by = 0.1),
+integrated_seurat <-
+  FindClusters(integrated_seurat, resolution = seq(0.1, 1, by = 0.1),
                verbose = my_verbose, algorithm = 1)
 
-# Calculate silhouette scores to determine the best resolution parameter
-clust <-
-  integrated_data@meta.data[, grepl("integrated_snn_res.",
-                                    colnames(integrated_data@meta.data))]
-mat <- as.data.frame(t(integrated_data$pca@cell.embeddings))
-out <- sil_subsample(mat, clust)
-means <- out[[1]]
-sd <- out[[2]]
-x <- seq(0.1, 1, by = 0.1)
-errbar(x, means, means + sd, means - sd, ylab = "mean silhouette score",
-       xlab = "resolution parameter")
-lines(x, means)
-best <- tail(x[which(means == max(means))], n = 1)
-best <- 0.5  # Fallback if the best resolution is not found
-legend("topright", paste("Best", best, sep = " = "))
-integrated_data$seurat_clusters <-
-  integrated_data@meta.data[, paste("integrated_snn_res.", best, sep = "")]
-Idents(integrated_data) <- "seurat_clusters"
+# Find the best resolution using silhouette scores
+silhouette_results <-
+  find_best_resolution(integrated_seurat, seq(0.1, 1, by = 0.1),
+                       pca_dims = 1:50)
+best_resolution <- silhouette_results$best_resolution
+
+# Plot silhouette scores
+plot_silhouette_scores(seq(0.1, 1, by = 0.1), silhouette_results$mean_scores,
+                       silhouette_results$sd_scores, plot_output_path)
+
+# Set clusters based on the best resolution
+integrated_seurat <- set_best_clusters(integrated_seurat, best_resolution)
 
 # Rename clusters based on predefined labels
 cluster_labels <- c("CD8 T-cell", "CD4 T-cell 1", "Plasma Cells", "Tumor.1",
                     "Tumor.2", "Tumor.3", "Tregs", "B-cells", "Myeloid",
                     "Endothelial", "Fibroblast", "Tumor.4", "CD4 T-cell 2",
                     "Misc")
-integrated_data$seurat_clusters <-
-  mapvalues(integrated_data$seurat_clusters,
-            from = 1:length(unique(integrated_data$seurat_clusters)) - 1,
-            to = cluster_labels)
-Idents(integrated_data) <- "seurat_clusters"
-
-# UMAP plot of clusters
-p <- DimPlot(integrated_data, reduction = "umap", group.by = "seurat_clusters",
-             label = TRUE, label.size = 7, repel = TRUE) + NoLegend()
-umap_cluster_plot_path <-
-  file.path(plot_output_path, "umap_clustering_results.png")
-ggsave(umap_cluster_plot_path, plot = p, width = 10, height = 8)
+integrated_seurat <-
+  plot_umap_clusters(integrated_seurat, cluster_labels, plot_output_path)
 
 # Find top genes per cluster
-top_genes <- FindAllMarkers(integrated_data, only.pos = TRUE, min.pct = 0.1,
-                            logfc.threshold = 0.5, test.use = "wilcox")
-top_genes <- top_genes %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+top_genes <- find_top_genes(integrated_seurat)
 
-# Generate heatmap for top genes
-gene_heatmap_plot(
-  GetAssayData(integrated_data, assay = "SCT", layer = "scale.data"),
-  integrated_data$seurat_clusters,
-  top_genes$gene, n_top_genes_per_cluster = 5, scaled = FALSE
+plot_gene_heatmap(
+  GetAssayData(integrated_seurat, assay = "SCT", layer = "scale.data"),
+  integrated_seurat$seurat_clusters,
+  top_genes$gene,
+  n_top_genes_per_cluster = 5,
+  scaled = FALSE,
+  plot_output_path = plot_output_path
 )
 
 # Refine labels based on blueprint labels and p-values
-l <- integrated_data$blueprint_labels
-l[integrated_data$blueprint_pvals > 0.1] <- NA
-l[l %in% names(which(table(l) < 50))] <- NA
-integrated_data$l <- l
+integrated_seurat <- filter_blueprint_labels(integrated_seurat)
 
 # Plot UMAP with refined labels
-p <- DimPlot(integrated_data, reduction = "umap", label = TRUE,
-             repel = TRUE, label.size = 5, group.by = "l") + NoLegend()
-ggsave(file.path(plot_output_path, "umap_refined_labels.png"),
-       plot = p, width = 10, height = 8)
+plot_umap_with_labels(integrated_seurat, plot_output_path)
 
 # Save the integrated data
-saveRDS(integrated_data,
+saveRDS(integrated_seurat,
         file = file.path(base_output_path, "colorectal_integrated.rds"))
 
+# ========================================================
+# Step 4: Generating Metacell Matrices
+# ========================================================
 
+metacell_matrices <-
+  generate_metacell_matrices(integrated_seurat, base_output_path, "metacell")
+
+# Plot cluster frequencies by treatment
+plot_cluster_freq_by_treatment(integrated_seurat, plot_output_path)
 
 # $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
 
-
-
-
 # Call the function with the correctly obtained counts matrix
 metacell_matrices <- make_cmfa(dat_mat = counts_matrix,
-                               clustering = integrated_data@active.ident,
+                               clustering = integrated_seurat@active.ident,
                                out_dir = base_output_path,
                                out_name = "metacell")
 
@@ -254,11 +224,6 @@ if (length(metacell_matrices) > 0) {
   # Prepare and save the expression data for each cluster
   expression_files <-
     prep_and_save_expr_for_aracne(base_output_path, "_all_all.txt.tsv")
-
-  # Get regulators from a file
-  regulators_file_path <- paste0(base_output_path, "/regulators.txt")
-  regulators <- readLines(paste0(base_output_path, "/regulators_list.txt"))
-  writeLines(regulators, con = regulators_file_path)
 
   # Running ARACNe for each cluster file
   aracne_output_dir <- paste0(base_output_path, "/aracne_results")
@@ -292,7 +257,7 @@ if (length(metacell_matrices) > 0) {
 
     # Load expression matrix from Seurat object
     exp_mat <-
-      GetAssayData(object = integrated_data, assay = "SCT", slot = "data")
+      GetAssayData(object = integrated_seurat, assay = "SCT", slot = "data")
     if (is.null(exp_mat) || ncol(exp_mat) == 0 || nrow(exp_mat) == 0) {
       stop(paste0("Expression matrix is empty or NULL.",
                   " Check your Seurat object and data extraction steps."))
@@ -339,28 +304,28 @@ if (!is.list(viper_results)) {
 
 # Combine the list elements of viper_results into a matrix
 viper_data <- do.call(cbind, viper_results)
-colnames(viper_data) <- colnames(integrated_data)
+colnames(viper_data) <- colnames(integrated_seurat)
 
 # Output dimensions of viper_data to verify alignment with expected structure
 cat("Dimensions of combined VIPER data matrix:")
 print(dim(viper_data))
 
-# The # of columns in viper_data matches the # of cells in integrated_data?
-if (ncol(viper_data) != ncol(integrated_data)) {
+# The # of columns in viper_data matches the # of cells in integrated_seurat?
+if (ncol(viper_data) != ncol(integrated_seurat)) {
   stop("Error: Mismatch in # of cells between VIPER and integrated data.",
-       " Expected", ncol(integrated_data), "cells, but got",
+       " Expected", ncol(integrated_seurat), "cells, but got",
        ncol(viper_data), "in VIPER results.")
 }
 
-# Validate that the column names in viper_data and integrated_data match
-if (!all(colnames(viper_data) == colnames(integrated_data))) {
+# Validate that the column names in viper_data and integrated_seurat match
+if (!all(colnames(viper_data) == colnames(integrated_seurat))) {
   stop(paste0("Error: Column names of the VIPER data do not",
               " match those of the Seurat object."))
 }
 
 # Add VIPER scores as a new assay in the Seurat object
-integrated_data[["VIPER_scores"]] <- CreateAssayObject(viper_data)
-DefaultAssay(integrated_data) <- "VIPER_scores"
+integrated_seurat[["VIPER_scores"]] <- CreateAssayObject(viper_data)
+DefaultAssay(integrated_seurat) <- "VIPER_scores"
 
 feature_variances <- apply(viper_data, 1, var)
 
@@ -377,8 +342,8 @@ if (nrow(non_constant_features) < 2) {
 }
 
 # Update the assay object with non-constant features
-integrated_data[["VIPER_scores"]] <- CreateAssayObject(non_constant_features)
-DefaultAssay(integrated_data) <- "VIPER_scores"
+integrated_seurat[["VIPER_scores"]] <- CreateAssayObject(non_constant_features)
+DefaultAssay(integrated_seurat) <- "VIPER_scores"
 
 # Perform hierarchical clustering on transposed data
 dist_matrix <- dist(t(non_constant_features))
@@ -386,11 +351,11 @@ hc <- hclust(dist_matrix)
 clusters <- cutree(hc, k = 5)
 
 # Add cluster assignments to Seurat object
-integrated_data <- AddMetaData(integrated_data, metadata = clusters,
-                               col.name = "seurat_clusters")
+integrated_seurat <- AddMetaData(integrated_seurat, metadata = clusters,
+                                 col.name = "seurat_clusters")
 
 # Visualize the re-clustering results using UMAP
-p <- DimPlot(integrated_data, reduction = "umap",
+p <- DimPlot(integrated_seurat, reduction = "umap",
              group.by = "seurat_clusters") +
   ggtitle("Re-clustering Based on VIPER Scores")
 
@@ -424,7 +389,7 @@ plot_cluster_frequency <- function(data, cluster_label, patient_label) {
 }
 
 # Function call to plot cluster frequency
-p1 <- plot_cluster_frequency(integrated_data,
+p1 <- plot_cluster_frequency(integrated_seurat,
                              cluster_label = "seurat_clusters",
                              patient_label = "patient")
 
@@ -434,12 +399,12 @@ cluster_frequency_plot_path <-
 ggsave(cluster_frequency_plot_path, plot = p1, width = 10, height = 8)
 
 # Save the final integrated and annotated Seurat object
-saveRDS(integrated_data,
+saveRDS(integrated_seurat,
         file = file.path(base_output_path,
                          "final_integrated_seurat_object.rds"))
 
 # Identify top genes per cluster if not predefined
-top_genes_per_cluster <- FindAllMarkers(integrated_data, only.pos = TRUE,
+top_genes_per_cluster <- FindAllMarkers(integrated_seurat, only.pos = TRUE,
                                         min.pct = 0.25,
                                         logfc.threshold = 0.25)
 
@@ -467,12 +432,12 @@ if (nrow(top_genes) < length(unique(valid_clusters$cluster)) * 5) {
   }
 
   # Attempt the heatmap plot if the gene list is correct
-  gene_data <- GetAssayData(integrated_data, layer = "data")
+  gene_data <- GetAssayData(integrated_seurat, layer = "data")
   if (any(!top_genes$gene %in% rownames(gene_data))) {
     cat("Some genes in top_genes not found in the data matrix.\n")
   } else {
     p2 <- gene_heatmap_plot(gene_data,
-                            integrated_data$seurat_clusters,
+                            integrated_seurat$seurat_clusters,
                             genes = top_genes$gene,
                             n_top_genes_per_cluster = 5,
                             scaled = TRUE) +
