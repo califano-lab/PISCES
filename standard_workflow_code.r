@@ -19,6 +19,7 @@ library(ggrepel)
 library(plyr)
 library(celldex)
 library(reshape2)
+library(readr)
 
 #' Create a large SingleR object with improved control over tuning
 #'
@@ -215,68 +216,6 @@ identify_and_merge_mrs <- function(dat_mat, num_mrs) {
     names(sort(x, decreasing = TRUE))[1:num_mrs]
   })
   unique(unlist(cbc_mrs))
-}
-
-#' Prepare and Save Expression Matrix for ARACNe Analysis
-#'
-#' This function prepares and saves an expression matrix for use in ARACNe
-#' analysis. It first removes duplicate genes, then subsets the matrix if
-#' necessary, and finally saves the matrix in both RDS and TSV formats.
-#'
-#' @param base_output_path  The base path for the output files.
-#' @param file_suffix       The suffix to append to the input file name.
-#'
-prep_and_save_expr_for_aracne <- function(base_output_path, file_suffix) {
-  files <- list.files(base_output_path, pattern = paste0(file_suffix, "$"),
-                      full.names = TRUE)
-  expr_files <- lapply(files, function(file_path) {
-    expr_data <- read.table(file_path, header = TRUE, sep = "\t",
-                            row.names = 1)
-    out_path <- gsub(".tsv$", "_for_aracne.tsv", file_path)
-    save_matrix_for_aracne(expr_data, out_path)
-    return(out_path)
-  })
-  return(expr_files)
-}
-
-#' Save Expression Matrix for ARACNe
-#'
-#' Saves an expression matrix in a format required by ARACNe3.
-#'
-#' @param expression_matrix The normalized expression matrix to be saved.
-#' @param output_file Path for the output file.
-save_matrix_for_aracne <- function(expression_matrix, output_file) {
-  # Ensure the matrix has proper row and column names
-  if (is.null(colnames(expression_matrix)) ||
-        is.null(rownames(expression_matrix))) {
-    stop("Expression matrix must have row and column names.")
-  }
-
-  # Ensure there is an extra column in the header (if not already present)
-  cat("\t", file = output_file, append = FALSE)
-  suppressWarnings(
-    write.table(expression_matrix, file = output_file, sep = "\t",
-                quote = FALSE, row.names = TRUE, col.names = TRUE,
-                append = TRUE)
-  )
-}
-
-#' Run ARACNe3
-#'
-#' Executes ARACNe3 on the provided expression matrix and regulator list.
-#'
-#' @param aracne_bin Path to the ARACNe3 binary.
-#' @param exp_file Path to the expression matrix file.
-#' @param regulators_file Path to the file containing regulator gene names.
-#' @param output_dir Directory to store ARACNe output.
-#' @param threads Number of threads to use for ARACNe computation.
-#' @param seed Seed for random number generation in ARACNe.
-run_aracne <- function(aracne_bin, exp_file, regulators_file, output_dir,
-                       threads = 1, seed = 123) {
-  cmd <-
-    sprintf("%s -e %s -r %s -o %s --threads %d --seed %d",
-            aracne_bin, exp_file, regulators_file, output_dir, threads, seed)
-  system(cmd)
 }
 
 #' Process ARACNe Results for VIPER Analysis
@@ -864,6 +803,8 @@ find_top_genes <- function(seurat_obj, assay_name = "SCT", n_top_genes = 10,
 #' @param plot_output_path        Path to save the heatmap plot.
 #'
 #' @return                        Heatmap plot.
+#' @todo                          Ask doctor of the gene exclusion and
+#'                                and refactor furhter
 plot_gene_heatmap <- function(dat, clust, genes, genes_by_cluster = TRUE,
                               n_top_genes_per_cluster = 5, color_palette = NULL,
                               scaled = FALSE, plot_output_path) {
@@ -1664,3 +1605,84 @@ plot_cluster_frequencies <-
 
     ggsave(output_path, plot = p, width = 10, height = 8)
   }
+
+# ========================================================
+# Running ARACNe Analysis functions
+# ========================================================
+
+create_regulators_file_from_expr <- function(expression_files, output_file) {
+  # Initialize a set to store all TFs found in the expression matrices
+  all_tfs_in_matrices <- c()
+
+  # Iterate over all expression files and collect TFs
+  for (file_path in expression_files) {
+    expr_data <- read.table(file_path, header = TRUE, sep = "\t", row.names = 1)
+    all_tfs_in_matrices <- union(all_tfs_in_matrices, rownames(expr_data))
+  }
+
+  # Save the list of TFs to the output file
+  write.table(all_tfs_in_matrices, file = output_file, quote = FALSE,
+              row.names = FALSE, col.names = FALSE)
+}
+
+#' Prepare and Save Expression Matrix for ARACNe Analysis
+#'
+#' This function prepares and saves an expression matrix for use in ARACNe
+#' analysis. It first removes duplicate genes, then subsets the matrix if
+#' necessary, and finally saves the matrix in both RDS and TSV formats.
+#'
+#' @param base_output_path  The base path for the output files.
+#' @param file_suffix       The suffix to append to the input file name.
+#'
+prep_and_save_expr_for_aracne <- function(base_output_path, file_suffix) {
+  files <- list.files(base_output_path, pattern = paste0(file_suffix, "$"),
+                      full.names = TRUE)
+  expr_files <- lapply(files, function(file_path) {
+    expr_data <- read.table(file_path, header = TRUE, sep = "\t",
+                            row.names = 1)
+    out_path <- gsub(".tsv$", "_for_aracne.tsv", file_path)
+    save_matrix_for_aracne(expr_data, out_path)
+    return(out_path)
+  })
+  return(expr_files)
+}
+
+#' Save Expression Matrix for ARACNe
+#'
+#' Saves an expression matrix in a format required by ARACNe3.
+#'
+#' @param expression_matrix The normalized expression matrix to be saved.
+#' @param output_file Path for the output file.
+save_matrix_for_aracne <- function(expression_matrix, output_file) {
+  # Ensure the matrix has proper row and column names
+  if (is.null(colnames(expression_matrix)) ||
+        is.null(rownames(expression_matrix))) {
+    stop("Expression matrix must have row and column names.")
+  }
+
+  # Ensure there is an extra column in the header (if not already present)
+  cat("\t", file = output_file, append = FALSE)
+  suppressWarnings(
+    write.table(expression_matrix, file = output_file, sep = "\t",
+                quote = FALSE, row.names = TRUE, col.names = TRUE,
+                append = TRUE)
+  )
+}
+
+#' Run ARACNe3
+#'
+#' Executes ARACNe3 on the provided expression matrix and regulator list.
+#'
+#' @param aracne_bin Path to the ARACNe3 binary.
+#' @param exp_file Path to the expression matrix file.
+#' @param regulators_file Path to the file containing regulator gene names.
+#' @param output_dir Directory to store ARACNe output.
+#' @param threads Number of threads to use for ARACNe computation.
+#' @param seed Seed for random number generation in ARACNe.
+run_aracne <- function(aracne_bin, exp_file, regulators_file, output_dir,
+                       threads = 1, seed = 123) {
+  cmd <-
+    sprintf("%s -e %s -r %s -o %s --threads %d --seed %d",
+            aracne_bin, exp_file, regulators_file, output_dir, threads, seed)
+  system(cmd)
+}

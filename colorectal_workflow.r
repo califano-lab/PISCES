@@ -25,6 +25,8 @@ library(plyr)
 base_path <- "/Users/apple/Desktop/240307_JOEL_DAVID_6_HUMAN_10X"
 base_output_path <- "/Users/apple/Desktop/output"
 plot_output_path <- file.path(base_output_path, "plots")
+trrust_file <- file.path(base_output_path, "trrust_rawdata.human.tsv")
+regulators_file <- file.path(base_output_path, "regulators.txt")
 aracne_binary_path <- paste0("/Users/apple/Documents/Research/aleks-lab/",
                              "repos/ARACNe3/build/src/app/",
                              "ARACNe3_app_release")
@@ -212,6 +214,34 @@ metacell_matrices <-
 # Plot cluster frequencies by treatment
 plot_cluster_freq_by_treatment(integrated_seurat, plot_output_path)
 
+# ========================================================
+# Step 5: Running ARACNe
+# ========================================================
+
+# Check if there are metacell matrices to process
+if (length(metacell_matrices) > 0) {
+  # Prepare and save the expression data for each cluster
+  expression_files <-
+    prep_and_save_expr_for_aracne(base_output_path, "_all_all.txt.tsv")
+
+  # Create the regulators file using the expression data
+  create_regulators_file_from_expr(expression_files, regulators_file)
+
+  # Define ARACNe output directory
+  aracne_output_dir <- file.path(base_output_path, "aracne_results")
+
+  # Create the directory if it does not exist
+  if (!dir.exists(aracne_output_dir)) {
+    dir.create(aracne_output_dir, recursive = TRUE)
+  }
+
+  # Running ARACNe for each cluster file
+  lapply(expression_files, function(exp_file) {
+    run_aracne(aracne_binary_path, exp_file, regulators_file,
+               aracne_output_dir, threads = 4, seed = 42)
+  })
+}
+
 # $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
 
 # Call the function with the correctly obtained counts matrix
@@ -228,8 +258,8 @@ if (length(metacell_matrices) > 0) {
   # Running ARACNe for each cluster file
   aracne_output_dir <- paste0(base_output_path, "/aracne_results")
   lapply(expression_files, function(exp_file) {
-    run_aracne(aracne_binary_path, exp_file, regulators_file_path,
-               aracne_output_dir, threads = 4, seed = 42)
+    run_aracne(aracne_binary_path, exp_file, aracne_output_dir, threads = 4,
+               seed = 42)
   })
 
   # Integrating VIPER analysis
