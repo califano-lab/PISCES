@@ -1610,21 +1610,6 @@ plot_cluster_frequencies <-
 # Running ARACNe Analysis functions
 # ========================================================
 
-create_regulators_file_from_expr <- function(expression_files, output_file) {
-  # Initialize a set to store all TFs found in the expression matrices
-  all_tfs_in_matrices <- c()
-
-  # Iterate over all expression files and collect TFs
-  for (file_path in expression_files) {
-    expr_data <- read.table(file_path, header = TRUE, sep = "\t", row.names = 1)
-    all_tfs_in_matrices <- union(all_tfs_in_matrices, rownames(expr_data))
-  }
-
-  # Save the list of TFs to the output file
-  write.table(all_tfs_in_matrices, file = output_file, quote = FALSE,
-              row.names = FALSE, col.names = FALSE)
-}
-
 #' Prepare and Save Expression Matrix for ARACNe Analysis
 #'
 #' This function prepares and saves an expression matrix for use in ARACNe
@@ -1669,6 +1654,23 @@ save_matrix_for_aracne <- function(expression_matrix, output_file) {
   )
 }
 
+# Function to run ARACNe for each expression and regulator file
+run_aracne_for_all <- function(aracne_bin, expression_files, regulator_files,
+                               output_base_dir, threads, seed) {
+  for (reg_name in names(regulator_files)) {
+    regulator_file <- regulator_files[[reg_name]]
+    for (exp_file in expression_files) {
+      exp_file_base <-
+        gsub("_all_all.txt_for_aracne.tsv", "", basename(exp_file))
+      output_dir <-
+        file.path(output_base_dir, paste0(reg_name, "_", exp_file_base))
+      create_directories(list(output_dir))
+      run_aracne(aracne_bin, exp_file, regulator_file, output_dir, threads,
+                 seed)
+    }
+  }
+}
+
 #' Run ARACNe3
 #'
 #' Executes ARACNe3 on the provided expression matrix and regulator list.
@@ -1685,4 +1687,119 @@ run_aracne <- function(aracne_bin, exp_file, regulators_file, output_dir,
     sprintf("%s -e %s -r %s -o %s --threads %d --seed %d",
             aracne_bin, exp_file, regulators_file, output_dir, threads, seed)
   system(cmd)
+}
+
+# ========================================================
+# Running VIPER Analysis functions
+# ========================================================
+
+# Function to process ARACNe output files
+generate_regulon_objects <- function(aracne_output_base_dir, exp_mat,
+                                     regulator_files, output_base_path) {
+  aracne_output_files <-
+    get_all_aracne_files(aracne_output_base_dir, regulator_files)
+
+  if (length(aracne_output_files) == 0) {
+    stop("No ARACNe output files found in the directory.")
+  }
+
+  regulon_list <- lapply(aracne_output_files, function(aracne_file) {
+    aracne_data_for_viper <- prep_aracne_output_for_viper(aracne_file)
+    regulon <-
+      generate_regulon(aracne_data_for_viper, exp_mat, output_base_path,
+                       paste0(basename(aracne_file), "_"))
+    return(regulon)
+  })
+
+  return(regulon_list)
+}
+
+# Helper function to aggregate ARACNe output files from all directories
+get_all_aracne_files <- function(base_dir, regulator_files) {
+  all_files <- unlist(lapply(names(regulator_files), function(reg_name) {
+    reg_dir <- file.path(base_dir, reg_name)
+    list.files(reg_dir,
+               pattern = "consolidated-net_.*\\.tsv$", full.names = TRUE)
+  }))
+  return(all_files)
+}
+
+# Helper function to load and process ARACNe output file
+prep_aracne_output_for_viper <- function(aracne_file) {
+  cat("Loading ARACNe output file:", aracne_file, "\n")
+
+  # Load ARACNe output file without headers
+  aracne_data <- read.table(aracne_file, header = FALSE, sep = "\t",
+                            check.names = FALSE, stringsAsFactors = FALSE,
+                            skip = 1)
+
+  # Only include the first three columns
+  aracne_data <- aracne_data[, 1:3]
+
+  # Define column names manually
+  colnames(aracne_data) <- c("regulator", "target", "mi")
+
+  # Convert the 'mi' column to numeric
+  aracne_data$mi <- as.numeric(aracne_data$mi)
+
+  return(aracne_data)
+}
+
+# Helper function to generate regulon object from ARACNe output
+generate_regulon <- function(aracne_data, exp_mat, output_base_path,
+                             file_prefix) {
+  # Process ARACNe results for VIPER analysis
+  reg_process(aracne_data, exp_mat, output_base_path, file_prefix)
+
+  # Load the pruned regulon object
+  pruned_regulon_file <-
+    file.path(output_base_path, paste0(file_prefix, "pruned.rds"))
+  pruned_regulon <- readRDS(pruned_regulon_file)
+
+  return(pruned_regulon)
+}
+
+# Function to run VIPER on a list of regulon objects
+run_viper <- function(exp_mat, regulon_list) {
+  viper_results <- lapply(regulon_list, function(regulon) {
+    viper_scores <- run_viper_analysis(exp_mat, regulon)
+    return(viper_scores)
+  })
+
+  # Check contents of viper_results
+  if (length(viper_results) == 0 || any(sapply(viper_results, is.null))) {
+    stop("VIPER results are empty or not properly formed.")
+  }
+
+  return(viper_results)
+}
+
+# Function to run VIPER analysis on a single regulon
+run_viper_analysis <- function(exp_mat, regulon) {
+  viper_scores <- tryCatch({
+    viper(exp_mat, regulon)
+  }, error = function(e) {
+    cat("Error in VIPER analysis:", e$message, "\n")
+    NULL
+  })
+
+  return(viper_scores)
+}
+
+# Function to save VIPER results
+save_viper_results <- function(viper_results, output_path) {
+  saveRDS(viper_results, file = output_path)
+}
+
+# ========================================================
+# Utility functions
+# ========================================================
+
+# Function to create multiple directories if they don't exist
+create_directories <- function(dir_paths) {
+  for (dir_path in dir_paths) {
+    if (!dir.exists(dir_path)) {
+      dir.create(dir_path, recursive = TRUE)
+    }
+  }
 }

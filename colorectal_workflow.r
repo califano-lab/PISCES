@@ -25,11 +25,18 @@ library(plyr)
 base_path <- "/Users/apple/Desktop/240307_JOEL_DAVID_6_HUMAN_10X"
 base_output_path <- "/Users/apple/Desktop/output"
 plot_output_path <- file.path(base_output_path, "plots")
-trrust_file <- file.path(base_output_path, "trrust_rawdata.human.tsv")
-regulators_file <- file.path(base_output_path, "regulators.txt")
 aracne_binary_path <- paste0("/Users/apple/Documents/Research/aleks-lab/",
                              "repos/ARACNe3/build/src/app/",
                              "ARACNe3_app_release")
+
+# Define paths to regulator files
+regulator_dir <- file.path(base_output_path, "human_hugo")
+regulator_files <- list(
+  cotfs = file.path(regulator_dir, "cotfs-hugo.txt"),
+  surface = file.path(regulator_dir, "surface-hugo.txt"),
+  sig = file.path(regulator_dir, "sig-hugo.txt"),
+  tfs = file.path(regulator_dir, "tfs-hugo.txt")
+)
 
 # Create the directory if it does not exist
 if (!dir.exists(plot_output_path)) {
@@ -215,31 +222,37 @@ metacell_matrices <-
 plot_cluster_freq_by_treatment(integrated_seurat, plot_output_path)
 
 # ========================================================
-# Step 5: Running ARACNe
+# Step 5: Running ARACNe and VIPER Analysis
 # ========================================================
 
-# Check if there are metacell matrices to process
 if (length(metacell_matrices) > 0) {
-  # Prepare and save the expression data for each cluster
   expression_files <-
     prep_and_save_expr_for_aracne(base_output_path, "_all_all.txt.tsv")
+  aracne_output_base_dir <- file.path(base_output_path, "aracne_results")
+  run_aracne_for_all(aracne_binary_path, expression_files, regulator_files,
+                     aracne_output_base_dir, threads = 4, seed = 42)
 
-  # Create the regulators file using the expression data
-  create_regulators_file_from_expr(expression_files, regulators_file)
-
-  # Define ARACNe output directory
-  aracne_output_dir <- file.path(base_output_path, "aracne_results")
-
-  # Create the directory if it does not exist
-  if (!dir.exists(aracne_output_dir)) {
-    dir.create(aracne_output_dir, recursive = TRUE)
+# Load expression matrix from Seurat object
+  exp_mat <- GetAssayData(object = integrated_seurat, assay = "SCT", layer = "data")
+  if (is.null(exp_mat) || ncol(exp_mat) == 0 || nrow(exp_mat) == 0) {
+    stop("Expression matrix is empty or NULL. Check your Seurat object and data extraction steps.")
   }
+  exp_mat <- as.matrix(exp_mat)
 
-  # Running ARACNe for each cluster file
-  lapply(expression_files, function(exp_file) {
-    run_aracne(aracne_binary_path, exp_file, regulators_file,
-               aracne_output_dir, threads = 4, seed = 42)
-  })
+  # Process ARACNe output files to generate regulon objects
+  regulon_list <-
+    generate_regulon_objects(aracne_output_base_dir, exp_mat, regulator_files,
+                             base_output_path)
+
+  # Run VIPER analysis on the regulon objects
+  viper_results <- run_viper(exp_mat, regulon_list)
+  viper_results_path <- file.path(base_output_path, "viper_results.rds")
+  save_viper_results(viper_results, viper_results_path)
+
+  message("VIPER analysis completed and results saved.")
+} else {
+  cat(paste0("No metacell matrices were generated.",
+             "Skipping ARACNe and analysis.\n"))
 }
 
 # $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
