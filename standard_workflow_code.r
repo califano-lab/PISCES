@@ -218,89 +218,6 @@ identify_and_merge_mrs <- function(dat_mat, num_mrs) {
   unique(unlist(cbc_mrs))
 }
 
-#' Process ARACNe Results for VIPER Analysis
-#'
-#' Converts ARACNe output into a regulon object suitable for VIPER analysis,
-#' including an optional pruning step to refine the regulon.
-#'
-#' @param a_file   Path to the ARACNe final network file in TSV format.
-#' @param exp_mat  Expression matrix used to generate the ARACNe network
-#'                 (genes x samples).
-#' @param out_dir  Directory where the processed regulon objects will be saved.
-#' @param out_name Prefix for the saved regulon files.
-reg_process <- function(a_file, exp_mat, out_dir, out_name = "") {
-  require(viper)
-
-  # Convert ARACNe output to regulon object
-  processed_reg <- convert_to_regulon(a_file, exp_mat)
-
-  # Save the unpruned regulon object
-  save_regulon(processed_reg, out_dir, paste0(out_name, "unpruned.rds"))
-
-  # Prune the regulon to refine it
-  pruned_reg <- prune_regulon(processed_reg)
-
-  # Save the pruned regulon object
-  save_regulon(pruned_reg, out_dir, paste0(out_name, "pruned.rds"))
-}
-
-#' Convert ARACNe Output to Regulon Object
-#'
-#' @param a_file  Path to the ARACNe network file.
-#' @param exp_mat Expression matrix associated with the ARACNe network.
-#'
-#' @return        A regulon object suitable for VIPER analysis.
-convert_to_regulon <- function(aracne_data, exp_mat) {
-  if (is.null(aracne_data) || nrow(aracne_data) == 0) {
-    stop("ARACNe data is empty or not available.")
-  }
-
-  if (is.null(dim(exp_mat))) {
-    stop("Expression matrix is not correctly formatted or is NULL.")
-  }
-
-  # Create a temporary file to store processed ARACNe data
-  temp_file <- tempfile()
-  write.table(aracne_data, temp_file, sep = "\t", row.names = FALSE,
-              col.names = FALSE, quote = FALSE)
-
-  tryCatch({
-    regulon_object <- aracne2regulon(afile = temp_file, eset = exp_mat,
-                                     format = "3col", verbose = TRUE)
-  }, error = function(e) {
-    cat("Error during regulon conversion: ", e$message, "\n")
-    stop("Failed to convert ARACNe output to regulon object: ", e$message)
-  })
-
-  unlink(temp_file)
-
-  if (is.null(regulon_object) || length(regulon_object) == 0) {
-    stop("Regulon object is NULL or empty.")
-  }
-
-  return(regulon_object)
-}
-
-#' Save Regulon Object to File
-#'
-#' @param regulon   The regulon object to be saved.
-#' @param out_dir   The directory for saving the regulon file.
-#' @param file_name The name of the file to save the regulon object in.
-save_regulon <- function(regulon, out_dir, file_name) {
-  saveRDS(regulon, file = file.path(out_dir, file_name))
-}
-
-#' Prune Regulon Object
-#'
-#' Applies pruning to a regulon object to refine its content.
-#'
-#' @param regulon The regulon object to be pruned.
-#'
-#' @return        A pruned regulon object.
-prune_regulon <- function(regulon) {
-  viper::pruneRegulon(regulon, 50, adaptive = FALSE, eliminate = TRUE)
-}
-
 #' Combine P-Values Using Fisher's Method
 #'
 #' This function combines multiple p-values into a single p-value using
@@ -1693,11 +1610,10 @@ run_aracne <- function(aracne_bin, exp_file, regulators_file, output_dir,
 # Running VIPER Analysis functions
 # ========================================================
 
-# Function to process ARACNe output files
+# Function to process ARACNe output files and generate regulon objects
 generate_regulon_objects <- function(aracne_output_base_dir, exp_mat,
-                                     regulator_files, output_base_path) {
-  aracne_output_files <-
-    get_all_aracne_files(aracne_output_base_dir, regulator_files)
+                                     output_base_path) {
+  aracne_output_files <- get_all_aracne_files(aracne_output_base_dir)
 
   if (length(aracne_output_files) == 0) {
     stop("No ARACNe output files found in the directory.")
@@ -1705,9 +1621,9 @@ generate_regulon_objects <- function(aracne_output_base_dir, exp_mat,
 
   regulon_list <- lapply(aracne_output_files, function(aracne_file) {
     aracne_data_for_viper <- prep_aracne_output_for_viper(aracne_file)
-    regulon <-
-      generate_regulon(aracne_data_for_viper, exp_mat, output_base_path,
-                       paste0(basename(aracne_file), "_"))
+    prefix <- gsub("-metaCells$", "", basename(dirname(aracne_file)))
+    regulon <- generate_regulon(aracne_data_for_viper, exp_mat,
+                                output_base_path, prefix)
     return(regulon)
   })
 
@@ -1715,14 +1631,12 @@ generate_regulon_objects <- function(aracne_output_base_dir, exp_mat,
 }
 
 # Helper function to aggregate ARACNe output files from all directories
-get_all_aracne_files <- function(base_dir, regulator_files) {
-  all_files <- unlist(lapply(names(regulator_files), function(reg_name) {
-    reg_dir <- file.path(base_dir, reg_name)
-    list.files(reg_dir,
-               pattern = "consolidated-net_.*\\.tsv$", full.names = TRUE)
-  }))
-  return(all_files)
-}
+get_all_aracne_files <-
+  function(base_dir, pattern = "consolidated-net_.*\\.tsv$") {
+    all_files <- list.files(base_dir, pattern = pattern, full.names = TRUE,
+                            recursive = TRUE)
+    return(all_files)
+  }
 
 # Helper function to load and process ARACNe output file
 prep_aracne_output_for_viper <- function(aracne_file) {
@@ -1753,7 +1667,7 @@ generate_regulon <- function(aracne_data, exp_mat, output_base_path,
 
   # Load the pruned regulon object
   pruned_regulon_file <-
-    file.path(output_base_path, paste0(file_prefix, "pruned.rds"))
+    file.path(output_base_path, paste0(file_prefix, "_pruned.rds"))
   pruned_regulon <- readRDS(pruned_regulon_file)
 
   return(pruned_regulon)
@@ -1772,6 +1686,89 @@ run_viper <- function(exp_mat, regulon_list) {
   }
 
   return(viper_results)
+}
+
+#' Process ARACNe Results for VIPER Analysis
+#'
+#' Converts ARACNe output into a regulon object suitable for VIPER analysis,
+#' including an optional pruning step to refine the regulon.
+#'
+#' @param a_file   Path to the ARACNe final network file in TSV format.
+#' @param exp_mat  Expression matrix used to generate the ARACNe network
+#'                 (genes x samples).
+#' @param out_dir  Directory where the processed regulon objects will be saved.
+#' @param out_name Prefix for the saved regulon files.
+reg_process <- function(a_file, exp_mat, out_dir, out_name = "") {
+  require(viper)
+
+  # Convert ARACNe output to regulon object
+  processed_reg <- convert_to_regulon(a_file, exp_mat)
+
+  # Save the unpruned regulon object
+  save_regulon(processed_reg, out_dir, paste0(out_name, "_unpruned.rds"))
+
+  # Prune the regulon to refine it
+  pruned_reg <- prune_regulon(processed_reg)
+
+  # Save the pruned regulon object
+  save_regulon(pruned_reg, out_dir, paste0(out_name, "_pruned.rds"))
+}
+
+#' Convert ARACNe Output to Regulon Object
+#'
+#' @param a_file  Path to the ARACNe network file.
+#' @param exp_mat Expression matrix associated with the ARACNe network.
+#'
+#' @return        A regulon object suitable for VIPER analysis.
+convert_to_regulon <- function(aracne_data, exp_mat) {
+  if (is.null(aracne_data) || nrow(aracne_data) == 0) {
+    stop("ARACNe data is empty or not available.")
+  }
+
+  if (is.null(dim(exp_mat))) {
+    stop("Expression matrix is not correctly formatted or is NULL.")
+  }
+
+  # Create a temporary file to store processed ARACNe data
+  temp_file <- tempfile()
+  write.table(aracne_data, temp_file, sep = "\t", row.names = FALSE,
+              col.names = FALSE, quote = FALSE)
+
+  tryCatch({
+    regulon_object <- aracne2regulon(afile = temp_file, eset = exp_mat,
+                                     format = "3col", verbose = TRUE)
+  }, error = function(e) {
+    cat("Error during regulon conversion: ", e$message, "\n")
+    stop("Failed to convert ARACNe output to regulon object: ", e$message)
+  })
+
+  unlink(temp_file)
+
+  if (is.null(regulon_object) || length(regulon_object) == 0) {
+    stop("Regulon object is NULL or empty.")
+  }
+
+  return(regulon_object)
+}
+
+#' Save Regulon Object to File
+#'
+#' @param regulon   The regulon object to be saved.
+#' @param out_dir   The directory for saving the regulon file.
+#' @param file_name The name of the file to save the regulon object in.
+save_regulon <- function(regulon, out_dir, file_name) {
+  saveRDS(regulon, file = file.path(out_dir, file_name))
+}
+
+#' Prune Regulon Object
+#'
+#' Applies pruning to a regulon object to refine its content.
+#'
+#' @param regulon The regulon object to be pruned.
+#'
+#' @return        A pruned regulon object.
+prune_regulon <- function(regulon) {
+  viper::pruneRegulon(regulon, 50, adaptive = FALSE, eliminate = TRUE)
 }
 
 # Function to run VIPER analysis on a single regulon

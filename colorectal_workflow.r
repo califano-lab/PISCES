@@ -232,17 +232,18 @@ if (length(metacell_matrices) > 0) {
   run_aracne_for_all(aracne_binary_path, expression_files, regulator_files,
                      aracne_output_base_dir, threads = 4, seed = 42)
 
-# Load expression matrix from Seurat object
-  exp_mat <- GetAssayData(object = integrated_seurat, assay = "SCT", layer = "data")
+  # Load expression matrix from Seurat object
+  exp_mat <-
+    GetAssayData(object = integrated_seurat, assay = "SCT", layer = "data")
   if (is.null(exp_mat) || ncol(exp_mat) == 0 || nrow(exp_mat) == 0) {
-    stop("Expression matrix is empty or NULL. Check your Seurat object and data extraction steps.")
+    stop(paste0("Expression matrix is empty or NULL.",
+                " Check your Seurat object and data extraction steps."))
   }
   exp_mat <- as.matrix(exp_mat)
 
   # Process ARACNe output files to generate regulon objects
   regulon_list <-
-    generate_regulon_objects(aracne_output_base_dir, exp_mat, regulator_files,
-                             base_output_path)
+    generate_regulon_objects(aracne_output_base_dir, exp_mat, base_output_path)
 
   # Run VIPER analysis on the regulon objects
   viper_results <- run_viper(exp_mat, regulon_list)
@@ -256,88 +257,8 @@ if (length(metacell_matrices) > 0) {
 }
 
 # $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
-
-# Call the function with the correctly obtained counts matrix
-metacell_matrices <- make_cmfa(dat_mat = counts_matrix,
-                               clustering = integrated_seurat@active.ident,
-                               out_dir = base_output_path,
-                               out_name = "metacell")
-
-if (length(metacell_matrices) > 0) {
-  # Prepare and save the expression data for each cluster
-  expression_files <-
-    prep_and_save_expr_for_aracne(base_output_path, "_all_all.txt.tsv")
-
-  # Running ARACNe for each cluster file
-  aracne_output_dir <- paste0(base_output_path, "/aracne_results")
-  lapply(expression_files, function(exp_file) {
-    run_aracne(aracne_binary_path, exp_file, aracne_output_dir, threads = 4,
-               seed = 42)
-  })
-
-  # Integrating VIPER analysis
-  # Process for ARACNe and VIPER
-  aracne_output_files <- list.files(aracne_output_dir,
-                                    pattern = "consolidated-net_.*\\.tsv$",
-                                    full.names = TRUE)
-
-  viper_results <- lapply(aracne_output_files, function(aracne_file) {
-    cat("Processing ARACNe output file:", aracne_file, "\n")
-
-    # Load ARACNe output file without headers
-    aracne_data <- read.table(aracne_file, header = FALSE, sep = "\t",
-                              check.names = FALSE, stringsAsFactors = FALSE,
-                              skip = 1)
-
-    #Only include the first three columns
-    aracne_data <- aracne_data[, 1:3]
-
-    # Define column names manually
-    colnames(aracne_data) <- c("regulator", "target", "mi")
-
-    # Convert the 'mi' column to numeric, checking for invalid data
-    aracne_data$mi <- as.numeric(aracne_data$mi)
-
-    # Load expression matrix from Seurat object
-    exp_mat <-
-      GetAssayData(object = integrated_seurat, assay = "SCT", slot = "data")
-    if (is.null(exp_mat) || ncol(exp_mat) == 0 || nrow(exp_mat) == 0) {
-      stop(paste0("Expression matrix is empty or NULL.",
-                  " Check your Seurat object and data extraction steps."))
-    }
-    print(paste("Expression matrix dimensions: Genes =", nrow(exp_mat),
-                "Samples =", ncol(exp_mat)))
-
-    ## Convert exp_mat to a matrix
-    exp_mat <- as.matrix(exp_mat)
-
-    # Convert and analyze
-    regulon_object <- convert_to_regulon(aracne_data, exp_mat)
-    viper_scores <- tryCatch({
-      viper::viper(exp_mat, regulon_object)
-    }, error = function(e) {
-      cat("Error in VIPER analysis:", e$message, "\n")
-      NULL
-    })
-
-    return(viper_scores)
-  })
-
-  # Debugging: check contents of viper_results
-  if (length(viper_results) == 0 || any(sapply(viper_results, is.null))) {
-    stop("VIPER results are empty or not properly formed.")
-  }
-
-  # Save VIPER results
-  viper_results_path <- paste0(base_output_path, "/viper_results.rds")
-  saveRDS(viper_results, file = viper_results_path)
-} else {
-  cat(paste0("No metacell matrices were generated.",
-             "Skipping ARACNe and VIPER analysis.\n"))
-}
-
 # ========================================================
-# Step 4: Re-clustering based on VIPER results
+# Step 6: Re-clustering based on VIPER results
 # ========================================================
 
 # Verify that viper_results is a list and correctly formatted
@@ -408,7 +329,7 @@ reclustered_umap_plot_path <-
 ggsave(reclustered_umap_plot_path, plot = p, width = 10, height = 8)
 
 # ========================================================
-# Step 5: Plotting the frequency of each cluster by patient
+# Step 7: Plotting the frequency of each cluster by patient
 # ========================================================
 
 plot_cluster_frequency <- function(data, cluster_label, patient_label) {
