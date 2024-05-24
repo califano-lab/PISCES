@@ -470,7 +470,18 @@ annotate_cells_with_singler <- function(seurat_object, blueprint_encode) {
 # Data Integration and Batch Correction functions
 # ========================================================
 
-# Function to check if Seurat objects are ready for integration
+#' Check if Seurat Objects are Ready for Integration
+#'
+#' It verifies that each Seurat object contains the "RNA" assay with non-empty
+#' counts. If a Seurat object is not ready, the function stops and returns an
+#' error message.
+#'
+#' @param seurat_list A list of Seurat objects to be checked.
+#' @param patient_list A list of patient information, where each element
+#'                     contains patient details including the 'id'.
+#'
+#' @return An invisible list of messages indicating which Seurat objects are
+#'         ready for integration.
 is_seurat_ready_integration <- function(seurat_list, patient_list) {
   invisible(lapply(seq_along(seurat_list), function(i) {
     seurat_object <- seurat_list[[i]]
@@ -493,7 +504,24 @@ is_seurat_ready_integration <- function(seurat_list, patient_list) {
 # Clustering functions
 # ========================================================
 
-# Function to find the best clustering resolution using silhouette scores
+#' Find the Best Clustering Resolution Using Silhouette Scores
+#'
+#' This function identifies the best clustering resolution for a Seurat object
+#' by calculating silhouette scores for various resolutions and selecting the
+#' one with the highest mean silhouette score.
+#'
+#' @param seurat_obj A Seurat object containing the clustering results and PCA
+#'                   embeddings.
+#' @param resolutions A vector of clustering resolutions to evaluate.
+#' @param pca_dims A vector of PCA dimensions to use for silhouette score
+#'                 calculation.
+#'
+#' @return A list containing:
+#'  - best_resolution: The resolution with the highest mean silhouette score.
+#'  - mean_scores: A named vector of mean silhouette scores for each
+#'                 resolution.
+#'  - sd_scores: A named vector of standard deviations of silhouette scores for
+#'               each resolution.
 find_best_resolution <- function(seurat_obj, resolutions, pca_dims) {
   # Extract clustering results for all resolutions
   clustering_results <-
@@ -604,7 +632,20 @@ compute_silhouette_width <- function(clustering, distance_matrix) {
   mean(silhouette_scores[, "sil_width"])
 }
 
-# Function to plot silhouette scores
+#' Plot Silhouette Scores
+#'
+#' This function plots the mean silhouette scores with error bars for different
+#' clustering resolutions and highlights the best resolution based on the
+#' highest mean silhouette score.
+#'
+#' @param resolutions A vector of clustering resolutions.
+#' @param mean_scores A vector of mean silhouette scores for each resolution.
+#' @param sd_scores A vector of standard deviations of silhouette scores for
+#'                  each resolution.
+#' @param plot_output_path The directory path where the plot will be saved.
+#'
+#' @return None. The function saves the plot as a PNG file in the specified
+#'         directory.
 plot_silhouette_scores <-
   function(resolutions, mean_scores, sd_scores, plot_output_path) {
     errbar(resolutions, mean_scores, mean_scores + sd_scores,
@@ -621,7 +662,15 @@ plot_silhouette_scores <-
     dev.off()
   }
 
-# Helper function to set clusters based on the best resolution
+#' Set Clusters Based on the Best Resolution
+#'
+#' This function assigns clusters to a Seurat object based on the best
+#' clustering resolution and sets the active identity class to these clusters.
+#'
+#' @param seurat_obj A Seurat object containing the clustering results.
+#' @param best_resolution The best clustering resolution identified.
+#'
+#' @return The Seurat object with clusters set based on the best resolution.
 set_best_clusters <- function(seurat_obj, best_resolution) {
   # Assign clusters based on the best resolution
   cluster_column_name <- paste("integrated_snn_res.", best_resolution, sep = "")
@@ -633,6 +682,17 @@ set_best_clusters <- function(seurat_obj, best_resolution) {
   return(seurat_obj)
 }
 
+#' Plot UMAP Clusters
+#'
+#' This function plots UMAP clusters for a Seurat object, assigning provided
+#' cluster labels and saving the plot to the specified output path.
+#'
+#' @param seurat_obj A Seurat object containing UMAP and clustering results.
+#' @param cluster_labels A character vector of cluster labels to assign to the
+#'                       clusters.
+#' @param plot_output_path The path where the UMAP plot will be saved.
+#'
+#' @return The Seurat object with updated cluster labels.
 plot_umap_clusters <- function(seurat_obj, cluster_labels, plot_output_path) {
   unique_clusters <- unique(seurat_obj$seurat_clusters)
   num_clusters <- length(unique_clusters)
@@ -662,7 +722,6 @@ plot_umap_clusters <- function(seurat_obj, cluster_labels, plot_output_path) {
 
   return(seurat_obj)
 }
-
 
 #' Find top genes for each cluster
 #'
@@ -1571,9 +1630,23 @@ save_matrix_for_aracne <- function(expression_matrix, output_file) {
   )
 }
 
-# Function to run ARACNe for each expression and regulator file
-run_aracne_for_all <- function(aracne_bin, expression_files, regulator_files,
-                               output_base_dir, threads, seed) {
+#' Run ARACNe for Each Expression and Regulator File
+#'
+#' This function runs ARACNe for each combination of expression and regulator
+#' files, creating the necessary output directories and executing the ARACNe
+#' command.
+#'
+#' @param aracne_bin Path to the ARACNe binary executable.
+#' @param expression_files A list of paths to expression files.
+#' @param regulator_files A named list of paths to regulator files.
+#' @param output_base_dir The base directory where ARACNe output will be saved.
+#' @param threads Number of threads to use for ARACNe.
+#' @param seed Seed for random number generation to ensure reproducibility.
+#'
+#' @return None. The function executes ARACNe and saves the results to the
+#'         specified output directories.
+run_aracne <- function(aracne_bin, expression_files, regulator_files,
+                       output_base_dir, threads, seed) {
   for (reg_name in names(regulator_files)) {
     regulator_file <- regulator_files[[reg_name]]
     for (exp_file in expression_files) {
@@ -1582,14 +1655,12 @@ run_aracne_for_all <- function(aracne_bin, expression_files, regulator_files,
       output_dir <-
         file.path(output_base_dir, paste0(reg_name, "_", exp_file_base))
       create_directories(list(output_dir))
-      run_aracne(aracne_bin, exp_file, regulator_file, output_dir, threads,
-                 seed)
+      execute_aracne(aracne_bin, exp_file, regulator_file, output_dir, threads,
+                     seed)
     }
   }
 }
 
-#' Run ARACNe3
-#'
 #' Executes ARACNe3 on the provided expression matrix and regulator list.
 #'
 #' @param aracne_bin Path to the ARACNe3 binary.
@@ -1598,8 +1669,8 @@ run_aracne_for_all <- function(aracne_bin, expression_files, regulator_files,
 #' @param output_dir Directory to store ARACNe output.
 #' @param threads Number of threads to use for ARACNe computation.
 #' @param seed Seed for random number generation in ARACNe.
-run_aracne <- function(aracne_bin, exp_file, regulators_file, output_dir,
-                       threads = 1, seed = 123) {
+execute_aracne <- function(aracne_bin, exp_file, regulators_file, output_dir,
+                           threads = 1, seed = 123) {
   cmd <-
     sprintf("%s -e %s -r %s -o %s --threads %d --seed %d",
             aracne_bin, exp_file, regulators_file, output_dir, threads, seed)
@@ -1610,7 +1681,20 @@ run_aracne <- function(aracne_bin, exp_file, regulators_file, output_dir,
 # Running VIPER Analysis functions
 # ========================================================
 
-# Function to process ARACNe output files and generate regulon objects
+#' Process ARACNe Output Files to Generate Regulon Objects
+#'
+#' This function processes ARACNe output files to generate regulon objects
+#' suitable for VIPER analysis. It loads ARACNe output files, prepares the
+#' data, and generates regulon objects.
+#'
+#' @param aracne_output_base_dir The base directory containing ARACNe output
+#'                               files.
+#' @param exp_mat The expression matrix used to generate the ARACNe network
+#'                (genes x samples).
+#' @param output_base_path The base directory where the processed regulon
+#'                         objects will be saved.
+#'
+#' @return A list of regulon objects generated from the ARACNe output files.
 generate_regulon_objects <- function(aracne_output_base_dir, exp_mat,
                                      output_base_path) {
   aracne_output_files <- get_all_aracne_files(aracne_output_base_dir)
@@ -1630,7 +1714,16 @@ generate_regulon_objects <- function(aracne_output_base_dir, exp_mat,
   return(regulon_list)
 }
 
-# Helper function to aggregate ARACNe output files from all directories
+#' Aggregate ARACNe Output Files from All Directories
+#'
+#' This helper function aggregates ARACNe output files from all directories
+#' within the specified base directory, matching the provided file name
+#' pattern.
+#'
+#' @param base_dir The base directory containing the ARACNe output files.
+#' @param pattern A regular expression pattern to match ARACNe output files.
+#'
+#' @return A character vector of file paths to the ARACNe output files.
 get_all_aracne_files <-
   function(base_dir, pattern = "consolidated-net_.*\\.tsv$") {
     all_files <- list.files(base_dir, pattern = pattern, full.names = TRUE,
@@ -1638,7 +1731,15 @@ get_all_aracne_files <-
     return(all_files)
   }
 
-# Helper function to load and process ARACNe output file
+#' Load and Process ARACNe Output File
+#'
+#' This helper function loads an ARACNe output file, processes its content,
+#' and prepares it for VIPER analysis.
+#'
+#' @param aracne_file The path to the ARACNe output file.
+#'
+#' @return A data frame containing the processed ARACNe data with columns
+#'         "regulator", "target", and "mi" (mutual information).
 prep_aracne_output_for_viper <- function(aracne_file) {
   cat("Loading ARACNe output file:", aracne_file, "\n")
 
@@ -1659,7 +1760,19 @@ prep_aracne_output_for_viper <- function(aracne_file) {
   return(aracne_data)
 }
 
-# Helper function to generate regulon object from ARACNe output
+#' Generate Regulon Object from ARACNe Output
+#'
+#' This helper function generates a regulon object from ARACNe output data and
+#' an expression matrix. The regulon object is then saved to the specified
+#' output directory.
+#'
+#' @param aracne_data A data frame containing ARACNe output data.
+#' @param exp_mat An expression matrix associated with the ARACNe network.
+#' @param output_base_path The base directory where the regulon objects will
+#'                         be saved.
+#' @param file_prefix The prefix for the saved regulon files.
+#'
+#' @return A pruned regulon object suitable for VIPER analysis.
 generate_regulon <- function(aracne_data, exp_mat, output_base_path,
                              file_prefix) {
   # Process ARACNe results for VIPER analysis
@@ -1673,10 +1786,19 @@ generate_regulon <- function(aracne_data, exp_mat, output_base_path,
   return(pruned_regulon)
 }
 
-# Function to run VIPER on a list of regulon objects
+#' Run VIPER on a List of Regulon Objects
+#'
+#' This function runs VIPER analysis on a list of regulon objects using an 
+#' expression matrix. It processes each regulon object and returns the VIPER 
+#' scores.
+#'
+#' @param exp_mat An expression matrix used for VIPER analysis.
+#' @param regulon_list A list of regulon objects generated from ARACNe output.
+#'
+#' @return A list of VIPER results for each regulon object.
 run_viper <- function(exp_mat, regulon_list) {
   viper_results <- lapply(regulon_list, function(regulon) {
-    viper_scores <- run_viper_analysis(exp_mat, regulon)
+    viper_scores <- execute_viper(exp_mat, regulon)
     return(viper_scores)
   })
 
@@ -1771,8 +1893,18 @@ prune_regulon <- function(regulon) {
   viper::pruneRegulon(regulon, 50, adaptive = FALSE, eliminate = TRUE)
 }
 
-# Function to run VIPER analysis on a single regulon
-run_viper_analysis <- function(exp_mat, regulon) {
+#' Run VIPER Analysis on a Single Regulon
+#'
+#' This function executes VIPER analysis on a single regulon using an
+#' expression matrix. It handles errors during the execution and returns the
+#' VIPER scores.
+#'
+#' @param exp_mat An expression matrix used for VIPER analysis.
+#' @param regulon A regulon object generated from ARACNe output.
+#'
+#' @return VIPER scores for the given regulon object or NULL if an error
+#'         occurs.
+execute_viper <- function(exp_mat, regulon) {
   viper_scores <- tryCatch({
     viper(exp_mat, regulon)
   }, error = function(e) {
@@ -1783,7 +1915,15 @@ run_viper_analysis <- function(exp_mat, regulon) {
   return(viper_scores)
 }
 
-# Function to save VIPER results
+#' Save VIPER Results to File
+#'
+#' This function saves the VIPER analysis results to a specified file in
+#' RDS format.
+#'
+#' @param viper_results A list of VIPER results to be saved.
+#' @param output_path The file path where the VIPER results will be saved.
+#'
+#' @return None.
 save_viper_results <- function(viper_results, output_path) {
   saveRDS(viper_results, file = output_path)
 }
@@ -1792,7 +1932,13 @@ save_viper_results <- function(viper_results, output_path) {
 # Utility functions
 # ========================================================
 
-# Function to create multiple directories if they don't exist
+#' Create Multiple Directories
+#'
+#' This function creates multiple directories if they do not already exist.
+#'
+#' @param dir_paths A character vector of directory paths to be created.
+#'
+#' @return None.
 create_directories <- function(dir_paths) {
   for (dir_path in dir_paths) {
     if (!dir.exists(dir_path)) {

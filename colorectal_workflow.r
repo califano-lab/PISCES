@@ -229,8 +229,8 @@ if (length(metacell_matrices) > 0) {
   expression_files <-
     prep_and_save_expr_for_aracne(base_output_path, "_all_all.txt.tsv")
   aracne_output_base_dir <- file.path(base_output_path, "aracne_results")
-  run_aracne_for_all(aracne_binary_path, expression_files, regulator_files,
-                     aracne_output_base_dir, threads = 4, seed = 42)
+  run_aracne(aracne_binary_path, expression_files, regulator_files,
+             aracne_output_base_dir, threads = 4, seed = 42)
 
   # Load expression matrix from Seurat object
   exp_mat <-
