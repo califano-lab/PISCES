@@ -10,39 +10,65 @@ library(ggplot2)
 
 ################## DEFINE YOUR LOCAL PATHS HERE ##################
 
-base_path <- "/Users/apple/Desktop/240307_JOEL_DAVID_6_HUMAN_10X"
-base_output_path <- "/Users/apple/Desktop/output"
-plot_output_path <- file.path(base_output_path, "plots")
+# Define the path of the directory where each of the patient directories
+# are located. For example if you had patient directories P1, P2,..., Pn. They
+# would be located at base_data_path/Pi.
+#
+# Very important: The directory should not contain any other directories than
+# the patient directories!
+base_data_path <- "/Users/apple/Desktop/colorectal-data"
+
+# Define the path of the of the data directory within each patient directory.
+# To be precise imagine the following:
+# You cd into a patient directory, where would you find the data?
+# For example, if you cd into P1, you would find the data in P1/data. In this
+# case, data_dir_path would be "data".
+#
+# Very important: The each patient directory must have the same path within
+# that leads to the data directory.
+patient_data_path <- paste0("analysis/cellranger-count-default/",
+                            "cellranger_count_outs/filtered_feature_bc_matrix")
+
+# Define the path of the directory where you want all your output to go.
+base_output_path <- "/Users/apple/Desktop/test-output"
+
+# Define the path of your ARACNe3 binary executable on the machine you are
+# running this script on.
 aracne_binary_path <- paste0("/Users/apple/Documents/Research/aleks-lab/",
                              "repos/ARACNe3/build/src/app/",
                              "ARACNe3_app_release")
 
-# Define paths to regulator files
-regulator_dir <- file.path(base_output_path, "human_hugo")
+# Define paths to regulator files, currently supported only in .txt format
+regulator_dir_path <- "/Users/apple/Desktop/output/human_hugo"
 regulator_files <- list(
-  cotfs = file.path(regulator_dir, "cotfs-hugo.txt"),
-  surface = file.path(regulator_dir, "surface-hugo.txt"),
-  sig = file.path(regulator_dir, "sig-hugo.txt"),
-  tfs = file.path(regulator_dir, "tfs-hugo.txt")
+  cotfs = file.path(regulator_dir_path, "cotfs-hugo.txt"),
+  surface = file.path(regulator_dir_path, "surface-hugo.txt"),
+  sig = file.path(regulator_dir_path, "sig-hugo.txt"),
+  tfs = file.path(regulator_dir_path, "tfs-hugo.txt")
 )
 
-# Create the directory if it does not exist
-if (!dir.exists(plot_output_path)) {
-  dir.create(plot_output_path, recursive = TRUE)
-}
+
+# Create necessary directories
+create_directories(c(
+  base_output_path,
+  file.path(base_output_path, "plots"),
+  file.path(base_output_path, "aracne_results"),
+  file.path(base_output_path, "viper_results")
+))
+
+do_directories_exist(c(base_data_path, base_output_path, aracne_binary_path,
+                       regulator_dir_path))
+
 #################################################################
 
-################## DEFINE OTHER PREFERENCES #####################
+################## DEFINE METADATA ##############################
 
-my_verbose <- FALSE
-
-#################################################################
-
-# ========================================================
-# Step 1: Load and preprocess data
-# ========================================================
-
-# Define patient information
+# Define any metadata you want.
+#
+# Very important: Please make sure you include an `id` in your metadata for
+# each patient. The patient id should be the name of the topmost directory
+# containing that patient's data. For example, if the data for patient P1 is
+# located at base_data_path/P1, then the id for P1 should be "P1".
 patients <- list(
   list(id = "JD001", type = "Early"),
   list(id = "JD002", type = "Early"),
@@ -52,44 +78,21 @@ patients <- list(
   list(id = "JD006", type = "Late")
 )
 
-# Define constants for the data path construction
-analysis_prefix <- "JOEL_DAVID_6_HUMAN_10X-"
-count_default_suffix <- "-cellranger-count-default"
-output_folder_suffix <- "_cellranger_count_outs"
-feature_matrix_dir <- "filtered_feature_bc_matrix"
+################## DEFINE OTHER PREFERENCES #####################
 
-# Load data for each patient into separate Seurat objects
-patient_seurat_list <- lapply(patients, function(patient) {
-  tryCatch({
-    message("Loading patient: ", patient$id)
-    seurat_obj <- load_into_seurat(patient, base_path, analysis_prefix,
-                                   count_default_suffix, output_folder_suffix,
-                                   feature_matrix_dir)
-    message("Completed loading for patient: ", patient$id)
-    return(seurat_obj)
-  }, error = function(e) {
-    stop("Error loading patient: ", patient$id, ": ", e$message)
-  })
-})
+# Set to TRUE to display verbose messages during the analysis
+my_verbose <- FALSE
 
-message("Finished loading patient data into Seurat objects.")
+#################################################################
 
-blueprint_encode <- BlueprintEncodeData()
+# ========================================================
+# Step 1: Load and preprocess data
+# ========================================================
 
-patient_seurat_list <- lapply(patient_seurat_list, function(p) {
-  patient_id <- unique(p$patient)
-  tryCatch({
-    message("Preprocessing Seurat object for patient: ", patient_id)
-    p <- preprocess_seurat(p, my_verbose, blueprint_encode)
-    message("Completed preprocessing Seurat object for patient: ", patient_id)
-    return(p)
-  }, error = function(e) {
-    stop("Error preprocessing Seurat object for patient: ",
-         patient_id, ": ", e$message)
-  })
-})
-
-message("Finished preprocessing seurat object(s).")
+patient_seurat_list <-
+  load_and_preprocess(patients, base_data_path, patient_data_path,
+                      mt_threshold = 25, min_rna = 1000, max_rna = 15000,
+                      my_verbose = my_verbose)
 
 # ========================================================
 # Step 2: Data Integration and Batch Correction
@@ -123,7 +126,6 @@ anchors <- FindIntegrationAnchors(object.list = patient_seurat_list,
 # Clean up memory by removing temporary objects
 rm(patient_seurat_list, features_to_integrate)
 
-#' @todo Ask doctor about the warnings here
 integrated_seurat <- IntegrateData(anchorset = anchors,
                                    normalization.method = "SCT", dims = 1:30,
                                    verbose = my_verbose)
@@ -222,7 +224,8 @@ if (length(metacell_matrices) > 0) {
 
   # Load expression matrix from Seurat object
   exp_mat <-
-    GetAssayData(object = integrated_seurat, assay = "SCT", layer = "data")
+    GetAssayData(object = integrated_seurat, assay = "integrated",
+                 layer = "scale.data")
   if (is.null(exp_mat) || ncol(exp_mat) == 0 || nrow(exp_mat) == 0) {
     stop(paste0("Expression matrix is empty or NULL.",
                 " Check your Seurat object and data extraction steps."))
@@ -235,7 +238,7 @@ if (length(metacell_matrices) > 0) {
 
   # Run VIPER analysis on the regulon objects
   viper_results <- run_viper(exp_mat, regulon_list)
-  viper_results_path <- file.path(base_output_path, "viper_results.rds")
+  viper_results_path <- file.path(viper_output_base_dir, "viper_results.rds")
   save_viper_results(viper_results, viper_results_path)
 
   message("VIPER analysis completed and results saved.")

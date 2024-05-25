@@ -14,6 +14,25 @@ compute_distance_matrix <- function(dat_mat) {
   return(dist_mat)
 }
 
+#' Notify Non-Existent Directories
+#'
+#' This function checks a list of directory paths and notifies the user which
+#' paths do not exist.
+#'
+#' @param dir_paths A character vector of directory paths to be checked.
+#'
+#' @return A character vector of non-existent directory paths.
+do_directories_exist <- function(dir_paths) {
+  non_existent_dirs <- dir_paths[!dir.exists(dir_paths)]
+  if (length(non_existent_dirs) > 0) {
+    message("The following directory paths do not exist:")
+    print(non_existent_dirs)
+  } else {
+    message("All directory paths exist.")
+  }
+  return(non_existent_dirs)
+}
+
 #' Create Multiple Directories
 #'
 #' This function creates multiple directories if they do not already exist.
