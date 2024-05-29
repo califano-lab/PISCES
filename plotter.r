@@ -2,6 +2,17 @@ library(R6)
 library(Seurat)
 library(ggplot2)
 
+#' Plotter Class for Visualizing Clustering Results
+#'
+#' This class provides methods to plot silhouette scores, UMAP clusters,
+#' UMAP with refined labels, and gene heatmaps. It utilizes a Seurat object
+#' containing clustering results and allows customization of clustering labels
+#' and plotting parameters.
+#'
+#' @field seurat_obj A Seurat object containing clustering and UMAP results.
+#' @field cluster_labels A vector of cluster labels to assign to clusters.
+#' @field plot_output_path The directory path where the plots will be saved.
+#' @field resolutions A vector of clustering resolutions to evaluate.
 Plotter <- R6Class( # nolint
   "Plotter",
   public = list(
@@ -10,6 +21,14 @@ Plotter <- R6Class( # nolint
     plot_output_path = NULL,
     resolutions = NULL,
 
+    #' Initialize the Plotter Object
+    #'
+    #' @param seurat_obj       A Seurat object containing clustering and UMAP
+    #'                         results.
+    #' @param cluster_labels   A vector of cluster labels to assign to clusters.
+    #' @param plot_output_path The directory path where the plots will be saved.
+    #' @param resolutions      A vector of clustering resolutions to evaluate.
+    #'                         Defaults to seq(0.1, 1, by = 0.1).
     initialize = function(seurat_obj, cluster_labels, plot_output_path,
                           resolutions = seq(0.1, 1, by = 0.1)) {
       self$seurat_obj <- seurat_obj
@@ -94,6 +113,7 @@ Plotter <- R6Class( # nolint
     #'
     #' @return The UMAP plot is saved to the specified directory.
     plot_umap_with_labels = function() {
+      private$filter_blueprint_labels()
       p <- DimPlot(self$seurat_obj, reduction = "umap", label = TRUE,
                    repel = TRUE, label.size = 5,
                    group.by = "refined_labels") + NoLegend()
@@ -212,6 +232,29 @@ Plotter <- R6Class( # nolint
   ),
 
   private = list(
+    #' Filter Blueprint Labels Based on P-values and Frequency
+    #'
+    #' This function refines cell type labels based on p-values and frequency.
+    #' Labels with p-values greater than 0.1 or occurring less than 50 times
+    #' are set to NA.
+
+    #' @return A Seurat object with refined labels.
+    filter_blueprint_labels = function() {
+      if (!all(c("blueprint_labels", "blueprint_pvals") %in%
+                 colnames(self$seurat_obj@meta.data))) {
+        stop(paste0("The Seurat object does not contain blueprint_labels",
+                    " or blueprint_pvals. Please ensure these columns exist."))
+      }
+
+      refined_labels <- self$seurat_obj$blueprint_labels
+      refined_labels[self$seurat_obj$blueprint_pvals > 0.1] <- NA
+      refined_labels[refined_labels %in%
+                       names(which(table(refined_labels) < 50))] <- NA
+      self$seurat_obj$refined_labels <- refined_labels
+
+      return(self$seurat_obj)
+    },
+
     #' Generate a color palette
     #'
     #' Generates a color palette based on the provided identities. Defaults to

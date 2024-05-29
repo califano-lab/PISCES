@@ -158,29 +158,6 @@ Clusterer <- R6Class( # nolint
         top_n(n = n_top_genes, wt = avg_log2FC) # nolint
 
       return(top_genes)
-    },
-
-    #' Filter Blueprint Labels Based on P-values and Frequency
-    #'
-    #' This function refines cell type labels based on p-values and frequency.
-    #' Labels with p-values greater than 0.1 or occurring less than 50 times
-    #' are set to NA.
-
-    #' @return A Seurat object with refined labels.
-    filter_blueprint_labels = function() {
-      if (!all(c("blueprint_labels", "blueprint_pvals") %in%
-                 colnames(self$seurat_obj@meta.data))) {
-        stop(paste0("The Seurat object does not contain blueprint_labels",
-                    " or blueprint_pvals. Please ensure these columns exist."))
-      }
-
-      refined_labels <- self$seurat_obj$blueprint_labels
-      refined_labels[self$seurat_obj$blueprint_pvals > 0.1] <- NA
-      refined_labels[refined_labels %in%
-                       names(which(table(refined_labels) < 50))] <- NA
-      self$seurat_obj$refined_labels <- refined_labels
-
-      return(self$seurat_obj)
     }
   ),
 
