@@ -16,33 +16,33 @@ library(scales)
 #'
 #' @field seurat_obj A Seurat object containing the integrated single-cell
 #'        data.
-#' @field stepping A vector of clustering resolutions to evaluate.
+#' @field resolutions A vector of clustering resolutions to evaluate.
 #' @field dims A vector of PCA dimensions to use for clustering.
 #' @field verbose A logical value indicating whether to print verbose output.
 Clusterer <- R6Class( # nolint
   "Clusterer",
   public = list(
     seurat_obj = NULL,
-    stepping = NULL,
-    dims = NULL,
     verbose = NULL,
+    resolutions = NULL,
+    dims = NULL,
 
     #' Initialize the Clusterer
     #'
-    #' @param seurat_obj A Seurat object containing the integrated single-cell
-    #'                   data.
-    #' @param stepping   A vector of clustering resolutions to evaluate
-    #'                   (default: seq(0.1, 1, by = 0.1)).
-    #' @param dims       A vector of PCA dimensions to use for clustering
-    #'                   (default: 1:50).
-    #' @param verbose    A logical value indicating whether to print verbose
-    #'                   output (default: FALSE).
-    initialize = function(seurat_obj, stepping = seq(0.1, 1, by = 0.1),
-                          dims = 1:50, verbose = FALSE) {
+    #' @param seurat_obj  A Seurat object containing the integrated single-cell
+    #'                    data.
+    #' @param verbose     A logical value indicating whether to print verbose
+    #'                    output (default: FALSE).
+    #' @param resolutions A vector of clustering resolutions to evaluate
+    #'                    (default: seq(0.1, 1, by = 0.1)).
+    #' @param dims        A vector of PCA dimensions to use for clustering
+    #'                    (default: 1:50).
+    initialize = function(seurat_obj, verbose = FALSE,
+                          resolutions = seq(0.1, 1, by = 0.1), dims = 1:50) {
       self$seurat_obj <- seurat_obj
-      self$stepping <- stepping
-      self$dims <- dims
       self$verbose <- verbose
+      self$resolutions <- resolutions
+      self$dims <- dims
     },
 
     #' Run Clustering
@@ -62,7 +62,7 @@ Clusterer <- R6Class( # nolint
         FindNeighbors(self$seurat_obj, dims = self$dims,
                       verbose = self$verbose)
       self$seurat_obj <-
-        FindClusters(self$seurat_obj, resolution = self$stepping,
+        FindClusters(self$seurat_obj, resolution = self$resolutions,
                      verbose = self$verbose, algorithm = 1)
       return(self$seurat_obj)
     },
@@ -98,7 +98,7 @@ Clusterer <- R6Class( # nolint
       sd_scores <- silhouette_scores$sd
 
       best_resolution <-
-        tail(self$stepping[which(mean_scores == max(mean_scores))], n = 1)
+        tail(self$resolutions[which(mean_scores == max(mean_scores))], n = 1)
 
       return(list(best_resolution = best_resolution, mean_scores = mean_scores,
                   sd_scores = sd_scores))
@@ -158,6 +158,29 @@ Clusterer <- R6Class( # nolint
         top_n(n = n_top_genes, wt = avg_log2FC) # nolint
 
       return(top_genes)
+    },
+
+    #' Filter Blueprint Labels Based on P-values and Frequency
+    #'
+    #' This function refines cell type labels based on p-values and frequency.
+    #' Labels with p-values greater than 0.1 or occurring less than 50 times
+    #' are set to NA.
+
+    #' @return A Seurat object with refined labels.
+    filter_blueprint_labels = function() {
+      if (!all(c("blueprint_labels", "blueprint_pvals") %in%
+                 colnames(self$seurat_obj@meta.data))) {
+        stop(paste0("The Seurat object does not contain blueprint_labels",
+                    " or blueprint_pvals. Please ensure these columns exist."))
+      }
+
+      refined_labels <- self$seurat_obj$blueprint_labels
+      refined_labels[self$seurat_obj$blueprint_pvals > 0.1] <- NA
+      refined_labels[refined_labels %in%
+                       names(which(table(refined_labels) < 50))] <- NA
+      self$seurat_obj$refined_labels <- refined_labels
+
+      return(self$seurat_obj)
     }
   ),
 
