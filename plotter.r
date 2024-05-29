@@ -25,11 +25,12 @@ Plotter <- R6Class( # nolint
     #'
     #' @param seurat_obj       A Seurat object containing clustering and UMAP
     #'                         results.
-    #' @param cluster_labels   A vector of cluster labels to assign to clusters.
     #' @param plot_output_path The directory path where the plots will be saved.
+    #' @param cluster_labels   A vector of cluster labels to assign to clusters.
+    #'                         Defaults to NULL.
     #' @param resolutions      A vector of clustering resolutions to evaluate.
     #'                         Defaults to seq(0.1, 1, by = 0.1).
-    initialize = function(seurat_obj, cluster_labels, plot_output_path,
+    initialize = function(seurat_obj, plot_output_path, cluster_labels = NULL,
                           resolutions = seq(0.1, 1, by = 0.1)) {
       self$seurat_obj <- seurat_obj
       self$cluster_labels <- cluster_labels
@@ -228,6 +229,41 @@ Plotter <- R6Class( # nolint
              height = 8)
 
       return(heatmap_plot)
+    },
+
+    #' Plot Cluster Frequencies by Treatment
+    #'
+    #' @param col_names        Vector of column names for the combined data
+    #'                         frame.
+    #' @param plot_title       Title of the plot.
+    #' @param binwidth         Width of bins in the dot plot.
+    #'
+    #' @return                 None. The function saves a plot to the specified
+    #'                         directory.
+    #' @todo                   Abstract so that it can be used for other...
+    plot_cluster_freq_by_treatment = function(col_names, plot_title,
+                                              binwidth = 0.01) {
+
+      cluster_freq_table <-
+        table(self$seurat_obj$id, self$seurat_obj$seurat_clusters,
+              self$seurat_obj$type)
+
+      early_data <-
+        private$calculate_cluster_frequencies(cluster_freq_table, 1)
+      late_data <-
+        private$calculate_cluster_frequencies(cluster_freq_table, 2)
+
+      combined_data <-
+        private$combine_cluster_frequencies(early_data, late_data, col_names)
+
+      plot_data <- private$melt_cluster_frequencies(combined_data)
+
+      private$plot_cluster_frequencies(plot_data, plot_title,
+                                       file.path(
+                                         self$plot_output_path,
+                                         "cluster_frequencies_by_treatment.png"
+                                       ),
+                                       binwidth)
     }
   ),
 
@@ -342,6 +378,85 @@ Plotter <- R6Class( # nolint
       } else {
         return(list(anno_colors = anno_colors, anno_row = NULL))
       }
-    }
+    },
+
+    #' Calculate Cluster Frequencies
+    #'
+    #' @param cluster_freq_table Table of cluster frequencies.
+    #' @param treatment_index Index of the treatment type.
+    #'
+    #' @return A data frame of normalized cluster frequencies.
+    calculate_cluster_frequencies = function(cluster_freq_table,
+                                             treatment_index) {
+      freq_data <- as.data.frame.matrix(cluster_freq_table[, , treatment_index])
+      freq_data <- freq_data[rowSums(freq_data) > 0, ]
+      freq_data <- apply(freq_data, 1, function(x) {
+        x / sum(x)
+      })
+      return(freq_data)
+    },
+
+    #' Combine Cluster Frequencies
+    #'
+    #' @param early_data Data frame of early treatment cluster frequencies.
+    #' @param late_data Data frame of late treatment cluster frequencies.
+    #' @param col_names Vector of column names for the combined data frame.
+    #'
+    #' @return A combined data frame of early and late treatment cluster
+    #'         frequencies.
+    combine_cluster_frequencies = function(early_data, late_data, col_names) {
+      combined <- cbind(early_data, late_data)
+      colnames(combined) <- col_names
+      return(combined)
+    },
+
+    #' Melt Cluster Frequencies
+    #'
+    #' @param combined_data Combined data frame of cluster frequencies.
+    #'
+    #' @return A melted data frame suitable for plotting.
+    melt_cluster_frequencies = function(combined_data) {
+      melted_data <- melt(combined_data)
+      colnames(melted_data) <- c("cluster", "type", "frequency")
+      melted_data$type <- unlist(
+        lapply(strsplit(as.character(melted_data$type), "_"), function(x) {
+          x[1]
+        })
+      )
+      melted_data$type <- factor(melted_data$type, levels = c("Early", "Late"))
+      melted_data$cluster <- as.factor(melted_data$cluster)
+      return(melted_data)
+    },
+
+    #' Plot Cluster Frequencies
+    #'
+    #' @param plot_data Data frame of cluster frequencies to be plotted.
+    #' @param plot_title Title of the plot.
+    #' @param output_path File path to save the plot.
+    #' @param binwidth Width of bins in the dot plot.
+    #'
+    #' @return None. The function saves a plot to the specified file path.
+    plot_cluster_frequencies =
+      function(plot_data, plot_title, output_path, binwidth) {
+        theme_update(plot.title = element_text(hjust = 0.5))
+
+        p <- ggplot(plot_data, aes(x = cluster, y = frequency, fill = type)) + # nolint
+          geom_dotplot(binaxis = "y", stackdir = "center",
+                       position = position_dodge(), binwidth = binwidth) +
+          theme(axis.text.x = element_text(angle = 45, hjust = 1),
+                panel.grid.major = element_blank(),
+                panel.grid.minor = element_blank(),
+                panel.background = element_blank(),
+                axis.line = element_line(colour = "black")) +
+          ggtitle(plot_title) +
+          theme(plot.title = element_text(size = 14, face = "bold"),
+                axis.title = element_text(size = 14, face = "bold"),
+                axis.text = element_text(size = 8),
+                legend.text = element_text(size = 10),
+                legend.title = element_text(size = 12),
+                strip.text.x = element_text(size = 12, face = "bold"))
+
+        ggsave(output_path, plot = p, width = 10, height = 8)
+      }
   )
 )
