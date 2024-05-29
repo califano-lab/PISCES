@@ -1,3 +1,5 @@
+source("utils.r")
+
 library(dplyr)
 library(cluster)
 library(umap)
@@ -186,11 +188,12 @@ Clusterer <- R6Class( # nolint
         private$initialize_silhouette_scores(num_subsamples,
                                              num_resolutions)
 
+      utils <- Utils$new()
       for (resolution_index in 1:num_resolutions) {
         for (subsample_index in 1:num_subsamples) {
           sampled_indices <- private$sample_cells(mat, 1000)
           distance_matrix <-
-            private$compute_distance_matrix(mat[, sampled_indices])
+            utils$compute_distance_matrix(mat[, sampled_indices])
           silhouette_scores[subsample_index, resolution_index] <-
             private$compute_silhouette_width(
               clust[sampled_indices, resolution_index],
@@ -198,6 +201,7 @@ Clusterer <- R6Class( # nolint
             )
         }
       }
+      rm(utils)
 
       list(means = colMeans(silhouette_scores, na.rm = TRUE),
            sd = apply(silhouette_scores, 2, sd, na.rm = TRUE))
@@ -221,22 +225,6 @@ Clusterer <- R6Class( # nolint
     #' @return          Indices of sampled cells.
     sample_cells = function(mat, num_cells) {
       sample(seq_len(ncol(mat)), min(num_cells, ncol(mat)))
-    },
-
-    #' Compute Distance Matrix
-    #'
-    #' Calculates a distance matrix using Pearson correlation.
-    #'
-    #' @param dat_mat A matrix of gene expression data (genes x samples).
-    #'
-    #' @return        A distance matrix.
-    compute_distance_matrix = function(dat_mat) {
-      if (!is.matrix(dat_mat)) {
-        dat_mat <- as.matrix(dat_mat)
-      }
-
-      dist_mat <- as.dist(1 - cor(dat_mat, method = "pearson"))
-      return(dist_mat)
     },
 
     #' Compute the mean silhouette width for a clustering
