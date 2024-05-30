@@ -6,3 +6,5 @@
 .vscode
 .ARACNe3_cached
 standard-workflow.Rproj
+.RDataTmp*
+*.RData
