@@ -1,4 +1,4 @@
-source("utils.r")
+source("classes/utils.r")
 
 library(reshape2)
 library(ggplot2)
@@ -16,6 +16,7 @@ MetacellGenerator <- R6Class( # nolint
   public = list(
     seurat_obj = NULL,
     base_output_path = NULL,
+    utils = Utils$new(),
 
     #' Initialize the MetacellGenerator Object
     #'
@@ -421,15 +422,13 @@ MetacellGenerator <- R6Class( # nolint
       if (num_neighbors >= ncol(dat_mat)) {
         stop("num_neighbors must be less than the number of columns in dat_mat")
       }
-      utils <- Utils$new()
-      dist_mat <- utils$compute_distance_matrix(dat_mat)
+      dist_mat <- self$utils$compute_distance_matrix(dat_mat)
       knn_neighbors <- private$find_knn(dist_mat, num_neighbors)
       imp_mat <- private$impute_matrix(dat_mat, knn_neighbors)
 
       if (!is.na(sub_size) && sub_size > 0 && sub_size <= ncol(imp_mat)) {
         imp_mat <- private$subset_matrix(imp_mat, sub_size)
       }
-      rm(utils)
       return(imp_mat)
     },
 

@@ -1,4 +1,4 @@
-source("utils.r")
+source("classes/utils.r")
 
 library(dplyr)
 library(cluster)
@@ -28,6 +28,7 @@ Clusterer <- R6Class( # nolint
     verbose = NULL,
     resolutions = NULL,
     dims = NULL,
+    utils = Utils$new(),
 
     #' Initialize the Clusterer
     #'
@@ -188,12 +189,11 @@ Clusterer <- R6Class( # nolint
         private$initialize_silhouette_scores(num_subsamples,
                                              num_resolutions)
 
-      utils <- Utils$new()
       for (resolution_index in 1:num_resolutions) {
         for (subsample_index in 1:num_subsamples) {
           sampled_indices <- private$sample_cells(mat, 1000)
           distance_matrix <-
-            utils$compute_distance_matrix(mat[, sampled_indices])
+            self$utils$compute_distance_matrix(mat[, sampled_indices])
           silhouette_scores[subsample_index, resolution_index] <-
             private$compute_silhouette_width(
               clust[sampled_indices, resolution_index],
@@ -201,7 +201,6 @@ Clusterer <- R6Class( # nolint
             )
         }
       }
-      rm(utils)
 
       list(means = colMeans(silhouette_scores, na.rm = TRUE),
            sd = apply(silhouette_scores, 2, sd, na.rm = TRUE))

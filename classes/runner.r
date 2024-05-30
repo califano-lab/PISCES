@@ -1,4 +1,4 @@
-source("utils.r")
+source("classes/utils.r")
 
 library(Seurat)
 
@@ -30,6 +30,7 @@ Runner <- R6Class( # nolint
     viper_output_path = NULL,
     threads = NULL,
     seed = NULL,
+    utils = Utils$new(),
 
     #' Initialize the Runner Class
     #'
@@ -67,11 +68,11 @@ Runner <- R6Class( # nolint
         stop("Metacell matrix is empty.")
       }
       expression_files <-
-        prep_and_save_expr_for_aracne(self$base_output_path,
-                                      "_all_all.txt.tsv")
-      run_aracne_helper(self$aracne_binary_path, expression_files,
-                        self$regulator_files, self$aracne_output_path,
-                        threads = self$threads, seed = self$seed)
+        private$prep_and_save_expr_for_aracne(self$base_output_path,
+                                              "_all_all.txt.tsv")
+      private$run_aracne_helper(self$aracne_binary_path, expression_files,
+                                self$regulator_files, self$aracne_output_path,
+                                threads = self$threads, seed = self$seed)
     },
 
     #' Run VIPER Analysis
@@ -154,7 +155,6 @@ Runner <- R6Class( # nolint
     #'                         results to the specified output directories.
     run_aracne_helper = function(aracne_bin, expression_files, regulator_files,
                                  output_base_dir, threads, seed) {
-      utils <- Utils$new()
       for (reg_name in names(regulator_files)) {
         regulator_file <- regulator_files[[reg_name]]
         for (exp_file in expression_files) {
@@ -162,12 +162,11 @@ Runner <- R6Class( # nolint
             gsub("_all_all.txt_for_aracne.tsv", "", basename(exp_file))
           output_dir <-
             file.path(output_base_dir, paste0(reg_name, "_", exp_file_base))
-          utils$create_directories(list(output_dir))
-          execute_aracne(aracne_bin, exp_file, regulator_file, output_dir,
-                         threads, seed)
+          self$utils$create_directories(list(output_dir))
+          private$execute_aracne(aracne_bin, exp_file, regulator_file,
+                                 output_dir, threads, seed)
         }
       }
-      rm(utils)
     },
 
     #' Executes ARACNe3 on the provided expression matrix and regulator list.
