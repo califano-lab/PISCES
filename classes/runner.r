@@ -87,7 +87,7 @@ Runner <- R6Class( # nolint
       viper_results <- private$run_viper_helper(exp_mat, regulon_list)
       viper_results_path <-
         file.path(self$viper_output_path, "viper_results.rds")
-      save_viper_results(viper_results, viper_results_path)
+      private$save_viper_results(viper_results, viper_results_path)
       message("VIPER analysis completed and results saved.")
     }
   ),
@@ -426,7 +426,7 @@ Runner <- R6Class( # nolint
     #'
     #' @return        A pruned regulon object.
     prune_regulon = function(regulon) {
-      viper::pruneRegulon(regulon, 50, adaptive = FALSE, eliminate = TRUE)
+      viper::pruneRegulon(regulon, 50, adaptive = TRUE, eliminate = TRUE)
     },
 
     #' Run VIPER Analysis on a Single Regulon
