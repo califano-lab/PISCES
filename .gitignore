@@ -8,3 +8,6 @@
 standard-workflow.Rproj
 .RDataTmp*
 *.RData
+
+# Some of Luka's files
+future/
