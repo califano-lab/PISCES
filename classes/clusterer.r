@@ -129,38 +129,38 @@ Clusterer <- R6Class( # nolint
     #' Find top genes for each cluster
     #'
     #' This function identifies the top marker genes for each cluster in the
-    #' integrated Seurat object.
+    #' integrated Seurat object. It uses the scaled gene expression data to
+    #' perform differential expression analysis between each cluster and all
+    #' other cells, and selects the top genes based on the specified log fold
+    #' change threshold.
     #'
     #' @param assay_name      The name of the assay to use for finding markers.
     #' @param n_top_genes     The number of top genes to find for each cluster.
     #' @param logfc_threshold The log fold change threshold for marker genes.
     #'
     #' @return                A data frame containing the top marker genes for
-    #'                        each cluster.
-    find_top_genes = function(assay_name = "SCT", n_top_genes = 10,
+    #'                        each cluster. The data frame includes the
+    #'                        following columns:
+    #'                        - `gene`:       The gene name.
+    #'                        - `cluster`:    The cluster for which the gene is
+    #'                                        a marker.
+    #'                        - `avg_log2FC`: The average log2 fold change of
+    #'                                        the gene in the cluster compared
+    #'                                        to all other cells.
+    find_top_genes = function(assay_name = "SCT", n_top_genes = 5,
                               logfc_threshold = 0.25) {
-      # Prepare the SCT assay for differential expression analysis
-      self$seurat_obj <- PrepSCTFindMarkers(self$seurat_obj)
+      scale_data <-
+        GetAssayData(self$seurat_obj, assay = assay_name, layer = "scale.data")
+      clusters <- Idents(self$seurat_obj)
 
-      # Find all markers
-      all_markers <- FindAllMarkers(
-        self$seurat_obj,
-        assay = assay_name,
-        only.pos = TRUE,
-        logfc.threshold = logfc_threshold
-      )
+      all_markers <- lapply(unique(clusters), function(cluster) {
+        private$find_cluster_markers(scale_data, clusters, cluster,
+                                     logfc_threshold, n_top_genes)
+      })
 
-      # Check if the cluster column exists
-      if (!"cluster" %in% colnames(all_markers)) {
-        stop("The 'cluster' column is missing in the markers data frame.")
-      }
+      all_markers_df <- bind_rows(all_markers)
 
-      # Select top markers for each cluster
-      top_genes <- all_markers %>%
-        group_by(cluster) %>% # nolint
-        top_n(n = n_top_genes, wt = avg_log2FC) # nolint
-
-      return(top_genes)
+      return(all_markers_df)
     }
   ),
 
@@ -237,6 +237,66 @@ Clusterer <- R6Class( # nolint
 
       silhouette_scores <- silhouette(as.numeric(clustering), distance_matrix)
       mean(silhouette_scores[, "sil_width"])
+    },
+
+    #' Find Cluster Markers
+    #'
+    #' This function identifies the top marker genes for a given cluster using
+    #' the log fold change (logFC) values calculated from the scaled gene
+    #' expression data.
+    #'
+    #' @param scale_data      A matrix of scaled gene expression data, where
+    #'                        rows are genes and columns are cells.
+    #' @param clusters        A factor or vector of cluster identities for each
+    #'                        cell.
+    #' @param cluster         The cluster identity for which to find marker
+    #'                        genes.
+    #' @param logfc_threshold The log fold change threshold for selecting
+    #'                        marker genes.
+    #' @param n_top_genes     The number of top marker genes to select for the
+    #'                        cluster.
+    #'
+    #' @return                A data frame containing the top marker genes for
+    #'                        the specified cluster.
+    find_cluster_markers = function(scale_data, clusters, cluster,
+                                    logfc_threshold, n_top_genes) {
+      cluster_cells <- clusters == cluster
+      other_cells <- clusters != cluster
+      logfc <- private$calculate_logfc(scale_data, cluster_cells, other_cells)
+
+      markers <- data.frame(
+        gene = rownames(scale_data),
+        cluster = cluster,
+        avg_log2FC = logfc,
+        stringsAsFactors = FALSE
+      )
+
+      markers <- markers %>% filter(avg_log2FC > logfc_threshold)
+
+      top_markers <- markers %>% top_n(n = n_top_genes, wt = avg_log2FC)
+
+      return(top_markers)
+    },
+
+    #' Calculate Log Fold Change
+    #'
+    #' This function calculates the average expression and log fold change
+    #' (logFC) for each gene between cells in a given cluster and all other
+    #' cells.
+    #'
+    #' @param scale_data    A matrix of scaled gene expression data, where rows
+    #'                      are genes and columns are cells.
+    #' @param cluster_cells A logical vector indicating which cells belong to
+    #'                      the current cluster.
+    #' @param other_cells   A logical vector indicating which cells belong to
+    #'                      all other clusters.
+    #'
+    #' @return              A numeric vector of log fold changes for each gene.
+    calculate_logfc = function(scale_data, cluster_cells, other_cells) {
+      avg_exp_cluster <- rowMeans(scale_data[, cluster_cells, drop = FALSE])
+      avg_exp_other <- rowMeans(scale_data[, other_cells, drop = FALSE])
+      logfc <- avg_exp_cluster - avg_exp_other
+      return(logfc)
     }
   )
 )
