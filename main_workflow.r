@@ -15,7 +15,8 @@ source("classes/utils.r")
 #'
 #' @note: The directory should not contain any other directories than the
 #' patient directories!
-base_data_path <- "/Users/apple/Desktop/colorectal-data"
+base_data_path <- paste0("/Users/apple/Documents/Research/aleks-lab/",
+                         "data/colorectal-data")
 
 #' @todo define the path of the of the data directory within each patient
 #' directory.
@@ -42,7 +43,8 @@ aracne_binary_path <- paste0("/Users/apple/Documents/Research/aleks-lab/",
 
 #' @todo define paths to regulator files, currently supported only in .txt
 #' format
-regulator_dir_path <- "/Users/apple/Desktop/output/human_hugo"
+regulator_dir_path <- paste0("/Users/apple/Documents/Research/aleks-lab/",
+                             "data/regulators/human_hugo")
 regulator_files <- list(
   cotfs = file.path(regulator_dir_path, "cotfs-hugo.txt"),
   surface = file.path(regulator_dir_path, "surface-hugo.txt"),
@@ -59,9 +61,13 @@ regulator_files <- list(
 #' containing that patient's data. For example, if the data for patient P1 is
 #' located at base_data_path/P1, then the id for P1 should be "P1".
 patients <- list(
+  list(id = "CRC0008", type = "Late"),
+  list(id = "CRC0026", type = "Late"),
+  list(id = "CRC0080", type = "Early"),
+  list(id = "CRC0081", type = "Early"),
+  list(id = "CRC0084", type = "Late"),
   list(id = "JD001", type = "Early"),
   list(id = "JD002", type = "Early"),
-  list(id = "JD003", type = "Late"),
   list(id = "JD004", type = "Late"),
   list(id = "JD005", type = "Early"),
   list(id = "JD006", type = "Late")
