@@ -1,3 +1,5 @@
+source("classes/utils.r")
+source("classes/converter.r")
 source("classes/loader.r")
 source("classes/preprocessor.r")
 source("classes/integrator.r")
@@ -5,7 +7,6 @@ source("classes/clusterer.r")
 source("classes/plotter.r")
 source("classes/metacell_generator.r")
 source("classes/runner.r")
-source("classes/utils.r")
 
 ################## DEFINE YOUR LOCAL PATHS HERE ##################
 
@@ -13,8 +14,12 @@ source("classes/utils.r")
 #' are located. For example if you had patient directories P1, P2,..., Pn. They
 #' would be located at base_data_path/Pi.
 #'
-#' @note: The directory should not contain any other directories than the
-#' patient directories!
+#' @note if by any chance you have data that's not in the Read10X format
+#' (e.g. .rds ensemble), you can still use this script. Just make sure that the
+#' .rds files are in the format base_data_path/Pi.rds and that you do step 0!
+#'
+#' @note: The directory should not contain any other directories/files than the
+#' patient directories/files!
 base_data_path <- paste0("/Users/apple/Documents/Research/aleks-lab/",
                          "data/colorectal-data")
 
@@ -79,7 +84,7 @@ patients <- list(
 my_verbose <- FALSE
 
 # =============================================================================
-# Step 0: Initialization (Don't add/remove anything here)
+# Initialization (Don't add/remove anything here)
 # =============================================================================
 
 utils <- Utils$new()
@@ -92,6 +97,17 @@ aracne_output_path <- paths$aracne_output_path
 viper_output_path <- paths$viper_output_path
 
 rm(Utils, utils)
+# =============================================================================
+# Step 0: Conversion for Non-Read10X Data
+# =============================================================================
+
+#' @todo in case that your data is not in the Read10X format, you can convert
+#' the data to the required format here. For example, if you have .rds files
+#' with ensemble IDs, you can convert them to gene names like this:
+# converter <- Converter$new(base_data_path)
+# converter$convert_ensembl_to_gene_names()
+
+# rm(Converter, converter)
 # =============================================================================
 # Step 1: Load data (No action necessary)
 # =============================================================================
@@ -176,7 +192,8 @@ metacell_matrices <- generator$generate_metacell_matrices()
 
 #' @todo define the column names and plot title for the cluster frequency plot
 col_names <-
-  c("Early_p1", "Early_p2", "Early_p3", "Late_p1", "Late_p2", "Late_p3")
+  c("Early_p1", "Early_p2", "Early_p3", "Early_p4", "Early_p5",
+    "Late_p1", "Late_p2", "Late_p3", "Late_p4", "Late_p5")
 plot_title <- "Cluster Frequency by Early vs Late"
 
 # Plot cluster frequencies by treatment
@@ -195,7 +212,7 @@ runner <- Runner$new(
 runner$run_aracne()
 runner$run_viper()
 
-rm(Runner, runner, Plotter, plotter)
+rm(Runner, runner)
 # =============================================================================
 # Step 7, ...: Re-clustering based on VIPER results, ... (SOON)
 # =============================================================================
