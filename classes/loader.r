@@ -42,7 +42,7 @@ Loader <- R6Class( # nolint
           if (file.exists(paste0(patient_path, ".rds"))) {
             seurat_obj <- private$load_rds_file(patient, patient_path)
           } else {
-            seurat_obj <- private$load_into_seurat(patient)
+            seurat_obj <- private$load_bc_matrix(patient)
           }
           message("Completed loading for patient: ", patient$id)
           return(seurat_obj)
@@ -57,28 +57,6 @@ Loader <- R6Class( # nolint
   ),
 
   private = list(
-    #' Load Patient Data into Seurat Object
-    #'
-    #' This function loads data for a given patient from a specified directory,
-    #' constructs the data path, reads the data using Read10X, and creates a
-    #' Seurat object with metadata.
-    #'
-    #' @param patient              List containing patient metadata.
-    #' @param base_path            Base path to the data directory.
-    #' @param patient_data_path    Relative path to the data directory within
-    #'                             each patient directory.
-    #'
-    #' @return                     A Seurat object with loaded data and
-    #'                             metadata.
-    load_into_seurat = function(patient) {
-      patient_id <- patient$id
-      data_dir <-
-        file.path(self$base_data_path, patient_id, self$patient_data_path)
-      data <- Read10X(data.dir = data_dir)
-      seurat_object <- private$create_seurat_object(data, patient)
-      return(seurat_object)
-    },
-
     #' Load Patient Data from RDS File into Seurat Object
     #'
     #' This function loads data for a given patient from an RDS file,
@@ -92,6 +70,28 @@ Loader <- R6Class( # nolint
     load_rds_file = function(patient, patient_path) {
       rds_file <- paste0(patient_path, ".rds")
       data <- readRDS(rds_file)
+      seurat_object <- private$create_seurat_object(data, patient)
+      return(seurat_object)
+    },
+
+    #' Load Patient Data from Feature Bc Matrix into Seurat Object
+    #'
+    #' This function loads data for a given patient from a specified directory,
+    #' constructs the data path, reads the data using Read10X, and creates a
+    #' Seurat object with metadata.
+    #'
+    #' @param patient              List containing patient metadata.
+    #' @param base_path            Base path to the data directory.
+    #' @param patient_data_path    Relative path to the data directory within
+    #'                             each patient directory.
+    #'
+    #' @return                     A Seurat object with loaded data and
+    #'                             metadata.
+    load_bc_matrix = function(patient) {
+      patient_id <- patient$id
+      data_dir <-
+        file.path(self$base_data_path, patient_id, self$patient_data_path)
+      data <- Read10X(data.dir = data_dir)
       seurat_object <- private$create_seurat_object(data, patient)
       return(seurat_object)
     },
