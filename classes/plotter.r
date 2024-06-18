@@ -142,37 +142,38 @@ Plotter <- R6Class( # nolint
     plot_gene_heatmap = function(genes, genes_by_cluster = TRUE,
                                  n_top_genes_per_cluster = 5,
                                  color_palette = NULL, scaled = TRUE) {
-      dat <- GetAssayData(self$seurat_obj, assay = "SCT", layer = "scale.data")
-      clust <- self$seurat_obj$seurat_clusters
+      data_mat <-
+        GetAssayData(self$seurat_obj, assay = "SCT", layer = "scale.data")
+      clusters <- self$seurat_obj$seurat_clusters
 
-      if (length(unique(clust)) == 0) {
+      if (length(unique(clusters)) == 0) {
         stop("No valid cluster data found.")
       }
 
-      identities <- levels(factor(clust))
+      identities <- levels(factor(clusters))
       my_color_palette <-
         private$generate_color_palette(identities, color_palette)
-      genes_in_data <- private$filter_genes(genes, dat)
-      subset_dat <- private$subset_data(dat, genes_in_data)
-      cluster_data <- private$prepare_cluster_data(clust, subset_dat)
+      genes_in_data <- private$filter_genes(genes, data_mat)
+      subset_mat <- private$subset_data(data_mat, genes_in_data)
+      cluster_data <- private$prepare_cluster_data(clusters, subset_mat)
       cluster_df <- cluster_data$cluster_df
-      subset_dat <- cluster_data$subset_dat
+      subset_mat <- cluster_data$subset_mat
 
       if (!scaled) {
-        subset_dat <- private$apply_scaling(subset_dat)
+        subset_mat <- private$apply_scaling(subset_mat)
       }
 
-      mat_breaks <- private$generate_mat_breaks(subset_dat)
+      mat_breaks <- private$generate_mat_breaks(subset_mat)
       annotations <-
         private$generate_annotations(cluster_df, my_color_palette,
                                      genes_by_cluster, n_top_genes_per_cluster)
-      row_gaps <- private$adjust_row_gaps(annotations, cluster_df, subset_dat)
+      row_gaps <- private$adjust_row_gaps(annotations, cluster_df, subset_mat)
 
       pheatmap_args <-
-        private$configure_pheatmap_args(subset_dat, cluster_df, mat_breaks,
+        private$configure_pheatmap_args(subset_mat, cluster_df, mat_breaks,
                                         annotations, row_gaps, genes_by_cluster)
       heatmap_plot <- private$create_heatmap(pheatmap_args)
-      private$save_heatmap(heatmap_plot, subset_dat)
+      private$save_heatmap(heatmap_plot, subset_mat)
 
       return(heatmap_plot)
     },
@@ -260,8 +261,23 @@ Plotter <- R6Class( # nolint
       }
     },
 
-    filter_genes = function(genes, dat) {
-      genes_in_data <- genes[genes %in% rownames(dat)]
+    #' Filter Genes Present in Data Matrix
+    #'
+    #' This function filters a given list of genes to include only those that
+    #' are present in the specified data matrix. It provides informative
+    #' messages about any genes that are not found in the data matrix.
+    #'
+    #' @param genes    A character vector of gene names to be included in the
+    #'                 heatmap.
+    #' @param data_mat A data matrix (e.g., expression matrix) with genes as
+    #'                 row names.
+    #'
+    #' @return         A character vector of genes that are present in the
+    #'                 data matrix.
+    #' @throws         Error if none of the specified genes are present in the
+    #'                 data matrix.
+    filter_genes = function(genes, data_mat) {
+      genes_in_data <- genes[genes %in% rownames(data_mat)]
       if (length(genes_in_data) == 0) {
         stop("None of the specified genes are present in the data.")
       }
@@ -273,36 +289,84 @@ Plotter <- R6Class( # nolint
       return(genes_in_data)
     },
 
-    subset_data = function(dat, genes_in_data) {
-      i <- sample(seq_len(ncol(dat)), min(10000, ncol(dat)), replace = FALSE)
-      subset_dat <- dat[genes_in_data, i]
-      if (nrow(subset_dat) != length(genes_in_data)) {
+    #' Subset Data Matrix by Genes and Samples
+    #'
+    #' This function subsets the data matrix to include only the specified
+    #' genes  and a random sample of columns (samples). It ensures that the
+    #' dimensions of the subsetted data match the number of specified genes.
+    #'
+    #' @param data_mat      A data matrix (e.g., expression matrix) with genes
+    #'                      as row names and samples as column names.
+    #' @param genes_in_data A character vector of gene names that are present
+    #'                      in the data matrix and should be included in the
+    #'                      subset.
+    #'
+    #' @return              A subsetted data matrix containing only the
+    #'                      specified genes and a random sample of up to 10,000
+    #'                      columns (samples).
+    #' @throws              Error if the number of rows in the subsetted data
+    #'                      matrix does not match the number of specified
+    #'                      genes.
+    subset_data = function(data_mat, genes_in_data) {
+      i <-
+        sample(seq_len(ncol(data_mat)), min(10000, ncol(data_mat)),
+               replace = FALSE)
+      subset_mat <- data_mat[genes_in_data, i]
+      if (nrow(subset_mat) != length(genes_in_data)) {
         stop("Subset data dimensions do not match the number of genes.")
       }
-      return(subset_dat)
+      return(subset_mat)
     },
 
-    prepare_cluster_data = function(clust, subset_dat) {
-      cluster_df <- data.frame(cluster = clust[colnames(subset_dat)])
-      rownames(cluster_df) <- colnames(subset_dat)
+    #' Prepare Cluster Data and Subset Matrix
+    #'
+    #' This function prepares the cluster data frame and orders the subset
+    #' matrix columns based on the cluster assignments. It ensures that the
+    #' subset matrix columns are ordered according to their cluster identity.
+    #'
+    #' @param clusters   A factor or vector indicating the cluster assignments
+    #'                   for each sample.
+    #' @param subset_mat A subsetted data matrix with genes as row names and
+    #'                   samples as column names.
+    #'
+    #' @return           A list containing:
+    #'                    - cluster_df: A data frame with cluster assignments
+    #'                                  for each sample, ordered by cluster
+    #'                                  identity.
+    #'                    - subset_mat: The subsetted data matrix with columns
+    #'                                  ordered by cluster identity.
+    prepare_cluster_data = function(clusters, subset_mat) {
+      cluster_df <- data.frame(cluster = clusters[colnames(subset_mat)])
+      rownames(cluster_df) <- colnames(subset_mat)
       ordered_indices <- order(cluster_df$cluster)
-      subset_dat <- subset_dat[, ordered_indices]
+      subset_mat <- subset_mat[, ordered_indices]
       cluster_df <- cluster_df[ordered_indices, , drop = FALSE]
-      return(list(cluster_df = cluster_df, subset_dat = subset_dat))
+      return(list(cluster_df = cluster_df, subset_mat = subset_mat))
     },
 
-    apply_scaling = function(subset_dat) {
-      return(t(apply(subset_dat, 1, private$calculate_z_score)))
+    #' Apply Row-wise Z-score Scaling to Data Matrix
+    #'
+    #' This function applies z-score normalization across rows of a subsetted
+    #' data matrix. It scales each gene (row) in the matrix by subtracting the
+    #' mean and dividing by the standard deviation.
+    #'
+    #' @param subset_mat A subsetted data matrix with genes as row names and
+    #'                   samples as column names.
+    #'
+    #' @return           A scaled data matrix where each gene (row) has been
+    #'                   z-score normalized.
+    apply_scaling = function(subset_mat) {
+      return(t(apply(subset_mat, 1, private$calculate_z_score)))
     },
 
     #' Calculate row-wise z-score
     #'
     #' Applies z-score normalization across rows of a matrix.
     #'
-    #' @param dat A numeric matrix.
-    #' @return  Matrix with row-wise z-scores.
-    calculate_z_score = function(dat) {
-      return((dat - mean(dat)) / sd(dat))
+    #' @param data_mat A numeric matrix.
+    #' @return         Matrix with row-wise z-scores.
+    calculate_z_score = function(data_mat) {
+      return((data_mat - mean(data_mat)) / sd(data_mat))
     },
 
     #' Generate matrix breaks based on quantiles
@@ -361,11 +425,28 @@ Plotter <- R6Class( # nolint
       }
     },
 
-    adjust_row_gaps = function(annotations, cluster_df, subset_dat) {
+    #' Adjust Row Gaps for Heatmap Annotations
+    #'
+    #' This function calculates the row gaps for heatmap annotations based on
+    #' the number of unique clusters and the actual number of top genes per
+    #' cluster. It ensures that row gaps are correctly set for visual
+    #' separation in the heatmap.
+    #'
+    #' @param annotations A list containing heatmap annotations, including row
+    #'                    annotations.
+    #' @param cluster_df  A data frame with cluster assignments for each
+    #'                    sample, ordered by cluster identity.
+    #' @param subset_mat  A subsetted data matrix with genes as row names and
+    #'                    samples as column names.
+    #'
+    #' @return            A numeric vector of row gaps for heatmap
+    #'                    visualization. Returns NULL if no row annotations are
+    #'                    provided.
+    adjust_row_gaps = function(annotations, cluster_df, subset_mat) {
       if (!is.null(annotations$anno_row)) {
         unique_clusters <- length(unique(cluster_df$cluster))
         n_top_genes_per_cluster_actual <-
-          floor(nrow(subset_dat) / unique_clusters)
+          floor(nrow(subset_mat) / unique_clusters)
         row_gaps <- (2:unique_clusters - 1) * n_top_genes_per_cluster_actual
       } else {
         row_gaps <- NULL
@@ -373,10 +454,31 @@ Plotter <- R6Class( # nolint
       return(row_gaps)
     },
 
-    configure_pheatmap_args = function(subset_dat, cluster_df, mat_breaks,
+    #' Configure pheatmap Arguments
+    #'
+    #' This function configures the arguments for the `pheatmap` function to
+    #' create a heatmap. It sets various parameters including the data matrix,
+    #' clustering options, annotations, and color settings.
+    #'
+    #' @param subset_mat       A subsetted data matrix with genes as row names
+    #'                         and samples as column names.
+    #' @param cluster_df       A data frame with cluster assignments for each
+    #'                         sample, ordered by cluster identity.
+    #' @param mat_breaks       A numeric vector of breakpoints for the heatmap
+    #'                         color scale.
+    #' @param annotations      A list containing heatmap annotations, including
+    #'                         row and column annotations.
+    #' @param gaps_row         A numeric vector of row gaps for heatmap
+    #'                         visualization. Can be NULL.
+    #' @param genes_by_cluster A boolean indicating whether to adjust the font
+    #'                         size for row names based on clustering.
+    #'
+    #' @return                 A list of arguments configured for the
+    #'                         `pheatmap` function.
+    configure_pheatmap_args = function(subset_mat, cluster_df, mat_breaks,
                                        annotations, gaps_row,
                                        genes_by_cluster) {
-      pheatmap_args <- list(subset_dat, cluster_rows = FALSE,
+      pheatmap_args <- list(subset_mat, cluster_rows = FALSE,
                             show_rownames = TRUE, cluster_cols = FALSE,
                             annotation_col = cluster_df, breaks = mat_breaks,
                             color = colorRampPalette(
@@ -396,13 +498,35 @@ Plotter <- R6Class( # nolint
       return(pheatmap_args)
     },
 
+    #' Create Heatmap Using pheatmap
+    #'
+    #' This function creates a heatmap using the `pheatmap` function with the
+    #' specified arguments.
+    #'
+    #' @param pheatmap_args A list of arguments configured for the `pheatmap`
+    #'                      function.
+    #'
+    #' @return              An object created by the `pheatmap` function, which
+    #'                      contains the heatmap and associated metadata.
     create_heatmap = function(pheatmap_args) {
       return(do.call(pheatmap, pheatmap_args))
     },
 
-    save_heatmap = function(heatmap_plot, subset_dat) {
-      plot_width <- max(10, min(ncol(subset_dat) / 100, 50))
-      plot_height <- max(8, min(nrow(subset_dat) / 5, 50))
+    #' Save Heatmap to File
+    #'
+    #' This function saves the generated heatmap plot to a file with dynamically
+    #' calculated dimensions.
+    #'
+    #' @param heatmap_plot An object created by the `pheatmap` function, which
+    #'                     contains the heatmap and associated metadata.
+    #' @param subset_mat   A subsetted data matrix with genes as row names and
+    #'                     samples as column names.
+    #'
+    #' @return             None. The heatmap is saved to the specified file
+    #'                     path.
+    save_heatmap = function(heatmap_plot, subset_mat) {
+      plot_width <- max(10, min(ncol(subset_mat) / 100, 50))
+      plot_height <- max(8, min(nrow(subset_mat) / 5, 50))
       heatmap_plot_path <- file.path(self$plot_output_path, "gene_heatmap.png")
       ggsave(heatmap_plot_path, plot = heatmap_plot$gtable, width = plot_width,
              height = plot_height, limitsize = FALSE)
