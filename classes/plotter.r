@@ -139,99 +139,40 @@ Plotter <- R6Class( # nolint
     #'                                row-wise z-score scaling if FALSE.
     #'
     #' @return                        Heatmap plot.
-    #' @todo                          Ask doctor of the gene exclusion and
-    #'                                and refactor further.
     plot_gene_heatmap = function(genes, genes_by_cluster = TRUE,
                                  n_top_genes_per_cluster = 5,
-                                 color_palette = NULL, scaled = FALSE) {
+                                 color_palette = NULL, scaled = TRUE) {
       dat <- GetAssayData(self$seurat_obj, assay = "SCT", layer = "scale.data")
       clust <- self$seurat_obj$seurat_clusters
 
       if (length(unique(clust)) == 0) {
         stop("No valid cluster data found.")
       }
-      identities <- levels(factor(clust))
 
-      # Prepare color palette
+      identities <- levels(factor(clust))
       my_color_palette <-
         private$generate_color_palette(identities, color_palette)
+      genes_in_data <- private$filter_genes(genes, dat)
+      subset_dat <- private$subset_data(dat, genes_in_data)
+      cluster_data <- private$prepare_cluster_data(clust, subset_dat)
+      cluster_df <- cluster_data$cluster_df
+      subset_dat <- cluster_data$subset_dat
 
-      # Filter genes to include only those present in the data
-      genes_in_data <- genes[genes %in% rownames(dat)]
-      if (length(genes_in_data) == 0) {
-        stop("None of the specified genes are present in the data.")
-      }
-      if (length(genes_in_data) < length(genes)) {
-        warning("Some genes are not present in the data and will be excluded.")
-        excluded_genes <- setdiff(genes, genes_in_data)
-        message("Excluded genes: ", paste(excluded_genes, collapse = ", "))
-      }
-
-      # Subset data for heatmap
-      i <- sample(seq_len(ncol(dat)), min(10000, ncol(dat)), replace = FALSE)
-      x <- dat[genes_in_data, i]
-
-      # Validate dimensions after subsetting
-      if (nrow(x) != length(genes_in_data)) {
-        stop("Subset data dimensions do not match the number of genes.")
-      }
-
-      # Prepare cluster data frame
-      df <- data.frame(cluster = clust[i])
-      rownames(df) <- colnames(x)
-      o <- order(df$cluster)
-      x <- x[, o]
-      df <- df[o, , drop = FALSE]
-
-      # Apply scaling if needed
       if (!scaled) {
-        x <- t(apply(x, 1, private$calculate_z_score))
+        subset_dat <- private$apply_scaling(subset_dat)
       }
 
-      # Generate breaks and annotations
-      mat_breaks <- private$generate_mat_breaks(x)
+      mat_breaks <- private$generate_mat_breaks(subset_dat)
       annotations <-
-        private$generate_annotations(df, my_color_palette, genes_by_cluster,
-                                     n_top_genes_per_cluster)
+        private$generate_annotations(cluster_df, my_color_palette,
+                                     genes_by_cluster, n_top_genes_per_cluster)
+      row_gaps <- private$adjust_row_gaps(annotations, cluster_df, subset_dat)
 
-      # Adjust gaps_row to match the actual number of genes
-      if (!is.null(annotations$anno_row)) {
-        unique_clusters <- length(unique(df$cluster))
-        n_top_genes_per_cluster_actual <- floor(nrow(x) / unique_clusters)
-        gaps_row <- (2:unique_clusters - 1) * n_top_genes_per_cluster_actual
-      } else {
-        gaps_row <- NULL
-      }
-
-      # Configure pheatmap arguments
-      pheatmap_args <- list(x, cluster_rows = FALSE, show_rownames = TRUE,
-                            cluster_cols = FALSE, annotation_col = df,
-                            breaks = mat_breaks,
-                            color = colorRampPalette(c("blue",
-                                                       "white",
-                                                       "red"))
-                            (length(mat_breaks)),
-                            fontsize_row = ifelse(genes_by_cluster, 10, 8),
-                            show_colnames = FALSE,
-                            annotation_colors = annotations$anno_colors)
-
-      if (!is.null(annotations$anno_row)) {
-        pheatmap_args$annotation_row <- annotations$anno_row
-        pheatmap_args$gaps_row <- gaps_row
-      }
-
-      # Create heatmap
-      heatmap_plot <- do.call(pheatmap, pheatmap_args)
-
-      # Calculate dynamic plot dimensions
-      plot_width <- max(10, min(ncol(x) / 100, 50))
-      plot_height <- max(8, min(nrow(x) / 5, 50))
-
-
-      # Save heatmap to file
-      heatmap_plot_path <- file.path(self$plot_output_path, "gene_heatmap.png")
-      ggsave(heatmap_plot_path, plot = heatmap_plot$gtable, width = plot_width,
-             height = plot_height, limitsize = FALSE)
+      pheatmap_args <-
+        private$configure_pheatmap_args(subset_dat, cluster_df, mat_breaks,
+                                        annotations, row_gaps, genes_by_cluster)
+      heatmap_plot <- private$create_heatmap(pheatmap_args)
+      private$save_heatmap(heatmap_plot, subset_dat)
 
       return(heatmap_plot)
     },
@@ -319,14 +260,49 @@ Plotter <- R6Class( # nolint
       }
     },
 
+    filter_genes = function(genes, dat) {
+      genes_in_data <- genes[genes %in% rownames(dat)]
+      if (length(genes_in_data) == 0) {
+        stop("None of the specified genes are present in the data.")
+      }
+      if (length(genes_in_data) < length(genes)) {
+        warning("Some genes are not present in the data and will be excluded.")
+        excluded_genes <- setdiff(genes, genes_in_data)
+        message("Excluded genes: ", paste(excluded_genes, collapse = ", "))
+      }
+      return(genes_in_data)
+    },
+
+    subset_data = function(dat, genes_in_data) {
+      i <- sample(seq_len(ncol(dat)), min(10000, ncol(dat)), replace = FALSE)
+      subset_dat <- dat[genes_in_data, i]
+      if (nrow(subset_dat) != length(genes_in_data)) {
+        stop("Subset data dimensions do not match the number of genes.")
+      }
+      return(subset_dat)
+    },
+
+    prepare_cluster_data = function(clust, subset_dat) {
+      cluster_df <- data.frame(cluster = clust[colnames(subset_dat)])
+      rownames(cluster_df) <- colnames(subset_dat)
+      ordered_indices <- order(cluster_df$cluster)
+      subset_dat <- subset_dat[, ordered_indices]
+      cluster_df <- cluster_df[ordered_indices, , drop = FALSE]
+      return(list(cluster_df = cluster_df, subset_dat = subset_dat))
+    },
+
+    apply_scaling = function(subset_dat) {
+      return(t(apply(subset_dat, 1, private$calculate_z_score)))
+    },
+
     #' Calculate row-wise z-score
     #'
     #' Applies z-score normalization across rows of a matrix.
     #'
-    #' @param x A numeric matrix.
+    #' @param dat A numeric matrix.
     #' @return  Matrix with row-wise z-scores.
-    calculate_z_score = function(x) {
-      return((x - mean(x)) / sd(x))
+    calculate_z_score = function(dat) {
+      return((dat - mean(dat)) / sd(dat))
     },
 
     #' Generate matrix breaks based on quantiles
@@ -383,6 +359,53 @@ Plotter <- R6Class( # nolint
       } else {
         return(list(anno_colors = anno_colors, anno_row = NULL))
       }
+    },
+
+    adjust_row_gaps = function(annotations, cluster_df, subset_dat) {
+      if (!is.null(annotations$anno_row)) {
+        unique_clusters <- length(unique(cluster_df$cluster))
+        n_top_genes_per_cluster_actual <-
+          floor(nrow(subset_dat) / unique_clusters)
+        row_gaps <- (2:unique_clusters - 1) * n_top_genes_per_cluster_actual
+      } else {
+        row_gaps <- NULL
+      }
+      return(row_gaps)
+    },
+
+    configure_pheatmap_args = function(subset_dat, cluster_df, mat_breaks,
+                                       annotations, gaps_row,
+                                       genes_by_cluster) {
+      pheatmap_args <- list(subset_dat, cluster_rows = FALSE,
+                            show_rownames = TRUE, cluster_cols = FALSE,
+                            annotation_col = cluster_df, breaks = mat_breaks,
+                            color = colorRampPalette(
+                                                     c("blue",
+                                                       "white",
+                                                       "red"))
+                            (length(mat_breaks)),
+                            fontsize_row = ifelse(genes_by_cluster, 10, 8),
+                            show_colnames = FALSE,
+                            annotation_colors = annotations$anno_colors)
+
+      if (!is.null(annotations$anno_row)) {
+        pheatmap_args$annotation_row <- annotations$anno_row
+        pheatmap_args$gaps_row <- gaps_row
+      }
+
+      return(pheatmap_args)
+    },
+
+    create_heatmap = function(pheatmap_args) {
+      return(do.call(pheatmap, pheatmap_args))
+    },
+
+    save_heatmap = function(heatmap_plot, subset_dat) {
+      plot_width <- max(10, min(ncol(subset_dat) / 100, 50))
+      plot_height <- max(8, min(nrow(subset_dat) / 5, 50))
+      heatmap_plot_path <- file.path(self$plot_output_path, "gene_heatmap.png")
+      ggsave(heatmap_plot_path, plot = heatmap_plot$gtable, width = plot_width,
+             height = plot_height, limitsize = FALSE)
     },
 
     #' Calculate Cluster Frequencies
