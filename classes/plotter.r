@@ -223,10 +223,15 @@ Plotter <- R6Class( # nolint
       # Create heatmap
       heatmap_plot <- do.call(pheatmap, pheatmap_args)
 
+      # Calculate dynamic plot dimensions
+      plot_width <- max(10, min(ncol(x) / 100, 50))
+      plot_height <- max(8, min(nrow(x) / 5, 50))
+
+
       # Save heatmap to file
       heatmap_plot_path <- file.path(self$plot_output_path, "gene_heatmap.png")
-      ggsave(heatmap_plot_path, plot = heatmap_plot$gtable, width = 10,
-             height = 8)
+      ggsave(heatmap_plot_path, plot = heatmap_plot$gtable, width = plot_width,
+             height = plot_height, limitsize = FALSE)
 
       return(heatmap_plot)
     },
