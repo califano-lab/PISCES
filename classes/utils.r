@@ -1,3 +1,5 @@
+library(R6)
+
 Utils <- R6Class( # nolint
   "Utils",
   public = list(
