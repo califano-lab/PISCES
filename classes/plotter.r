@@ -525,7 +525,7 @@ Plotter <- R6Class( # nolint
     #' @return             None. The heatmap is saved to the specified file
     #'                     path.
     save_heatmap = function(heatmap_plot, subset_mat) {
-      plot_width <- max(10, min(ncol(subset_mat) / 100, 50))
+      plot_width <- max(5, min(ncol(subset_mat) / 200, 25))
       plot_height <- max(8, min(nrow(subset_mat) / 5, 50))
       heatmap_plot_path <- file.path(self$plot_output_path, "gene_heatmap.png")
       ggsave(heatmap_plot_path, plot = heatmap_plot$gtable, width = plot_width,
