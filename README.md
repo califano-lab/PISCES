@@ -57,6 +57,14 @@ For Red Hat-based distributions (like Fedora):
    sudo dnf install R
    ```
 
+#### GCC Requirement
+
+Note: Ensure you have GCC version 9.3.1 or later installed, as some R packages may require it. To check your GCC version, run:
+```sh
+gcc --version
+```
+If you need to update GCC, you can do so by following the instructions specific to your distribution.
+
 ### R Packages
 
 After installing R, you need several R packages. Install the required packages by running the following commands in R:
@@ -76,6 +84,14 @@ BiocManager::install("celldex")
 
 # Install viper package
 BiocManager::install("viper")
+```
+
+If you encounter issues installing `SingleR` from `install.packages()`, consider using `devtools` or a related method:
+```R
+if (!requireNamespace("devtools", quietly = TRUE)) {
+    install.packages("devtools")
+}
+devtools::install_github("dviraran/SingleR")
 ```
 
 ### ARACNe3
@@ -187,7 +203,7 @@ We welcome contributions to improve and enhance the `standard-workflow`. If you 
    - Clone the forked repository to your local machine:
      ```sh
      git clone git@github.com:your-username/standard-workflow.git
-     cd main_workflow.r
+     cd standard-workflow
      ```
 
 3. **Create a Branch**:
