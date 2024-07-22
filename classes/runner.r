@@ -330,10 +330,11 @@ Runner <- R6Class( # nolint
     #'
     #' @return             A list of VIPER results for each regulon object.
     run_viper_helper = function(exp_mat, regulon_list) {
-      viper_results <- lapply(regulon_list, function(regulon) {
-        viper_scores <- private$execute_viper(exp_mat, regulon)
-        return(viper_scores)
-      })
+      # viper_results <- lapply(regulon_list, function(regulon) {
+      #   viper_scores <- private$execute_viper(exp_mat, regulon)
+      #   return(viper_scores)
+      # })
+      viper_results <- private$execute_viper(exp_mat, regulon_list)
 
       # Check contents of viper_results
       if (length(viper_results) == 0 || any(sapply(viper_results, is.null))) {
@@ -436,13 +437,13 @@ Runner <- R6Class( # nolint
     #' VIPER scores.
     #'
     #' @param exp_mat An expression matrix used for VIPER analysis.
-    #' @param regulon A regulon object generated from ARACNe output.
+    #' @param regulon_list A regulon list generated from ARACNe output.
     #'
     #' @return VIPER scores for the given regulon object or NULL if an error
     #'         occurs.
-    execute_viper = function(exp_mat, regulon) {
+    execute_viper = function(exp_mat, regulon_list) {
       viper_scores <- tryCatch({
-        viper(exp_mat, regulon)
+        viper(exp_mat, regulon_list)
       }, error = function(e) {
         cat("Error in VIPER analysis:", e$message, "\n")
         NULL
