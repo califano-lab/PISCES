@@ -183,19 +183,21 @@ Plotter <- R6Class( # nolint
     #' @param col_names        Vector of column names for the combined data
     #'                         frame.
     #' @param plot_title       Title of the plot.
-    #' @param binwidth         Width of bins in the dot plot.
+    #' @param group_by         Metadata label to group by.
     #' @param plot_type        Type of plot: "dot" for dot plot or "box" for
     #'                         box-whisker plot.
+    #' @param binwidth         Width of bins in the dot plot.
     #'
     #' @return                 None. The function saves a plot to the specified
     #'                         directory.
     plot_cluster_freq_by_treatment = function(col_names, plot_title,
-                                              binwidth = 0.01,
-                                              plot_type = "dot") {
+                                              group_by,
+                                              plot_type = "dot",
+                                              binwidth = 0.01) {
 
       cluster_freq_table <-
         table(self$seurat_obj$id, self$seurat_obj$seurat_clusters,
-              self$seurat_obj$type)
+              self$seurat_obj[[group_by]])
 
       early_data <-
         private$calculate_cluster_frequencies(cluster_freq_table, 1)

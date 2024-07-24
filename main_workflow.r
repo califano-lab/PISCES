@@ -197,7 +197,10 @@ col_names <-
 plot_title <- "Cluster Frequency by Early vs Late"
 
 # Plot cluster frequencies by treatment
-plotter$plot_cluster_freq_by_treatment(col_names, plot_title)
+plotter$plot_cluster_freq_by_treatment(col_names, plot_title,
+                                       group_by = "type", plot_type = "dot")
+plotter$plot_cluster_freq_by_treatment(col_names, plot_title,
+                                       group_by = "type", plot_type = "box")
 
 rm(MetacellGenerator, generator)
 # =============================================================================
