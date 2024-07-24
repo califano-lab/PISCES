@@ -184,12 +184,14 @@ Plotter <- R6Class( # nolint
     #'                         frame.
     #' @param plot_title       Title of the plot.
     #' @param binwidth         Width of bins in the dot plot.
+    #' @param plot_type        Type of plot: "dot" for dot plot or "box" for
+    #'                         box-whisker plot.
     #'
     #' @return                 None. The function saves a plot to the specified
     #'                         directory.
-    #' @todo                   Abstract so that it can be used for other...
     plot_cluster_freq_by_treatment = function(col_names, plot_title,
-                                              binwidth = 0.01) {
+                                              binwidth = 0.01,
+                                              plot_type = "dot") {
 
       cluster_freq_table <-
         table(self$seurat_obj$id, self$seurat_obj$seurat_clusters,
@@ -205,12 +207,14 @@ Plotter <- R6Class( # nolint
 
       plot_data <- private$melt_cluster_frequencies(combined_data)
 
+      output_file <-
+        paste0("cluster_frequencies_by_treatment_", plot_type, ".png")
       private$plot_cluster_frequencies(plot_data, plot_title,
                                        file.path(
                                          self$plot_output_path,
                                          "cluster_frequencies_by_treatment.png"
                                        ),
-                                       binwidth)
+                                       binwidth, plot_type)
     }
   ),
 
@@ -582,33 +586,81 @@ Plotter <- R6Class( # nolint
 
     #' Plot Cluster Frequencies
     #'
-    #' @param plot_data Data frame of cluster frequencies to be plotted.
-    #' @param plot_title Title of the plot.
+    #' @param plot_data   Data frame of cluster frequencies to be plotted.
+    #' @param plot_title  Title of the plot.
     #' @param output_path File path to save the plot.
-    #' @param binwidth Width of bins in the dot plot.
+    #' @param binwidth    Width of bins in the dot plot.
+    #' @param plot_type   Type of plot: "dot" for dot plot or "box" for
+    #'                    box-whisker plot.
     #'
-    #' @return None. The function saves a plot to the specified file path.
+    #' @return            None. The function saves a plot to the specified file
+    #'                    path.
     plot_cluster_frequencies =
-      function(plot_data, plot_title, output_path, binwidth) {
+      function(plot_data, plot_title, output_path, binwidth, plot_type) {
         theme_update(plot.title = element_text(hjust = 0.5))
 
-        p <- ggplot(plot_data, aes(x = cluster, y = frequency, fill = type)) + # nolint
-          geom_dotplot(binaxis = "y", stackdir = "center",
-                       position = position_dodge(), binwidth = binwidth) +
-          theme(axis.text.x = element_text(angle = 45, hjust = 1),
-                panel.grid.major = element_blank(),
-                panel.grid.minor = element_blank(),
-                panel.background = element_blank(),
-                axis.line = element_line(colour = "black")) +
-          ggtitle(plot_title) +
-          theme(plot.title = element_text(size = 14, face = "bold"),
-                axis.title = element_text(size = 14, face = "bold"),
-                axis.text = element_text(size = 8),
-                legend.text = element_text(size = 10),
-                legend.title = element_text(size = 12),
-                strip.text.x = element_text(size = 12, face = "bold"))
+        if (plot_type == "dot") {
+          private$plot_dot_plot(plot_data, plot_title, output_path, binwidth)
+        } else if (plot_type == "box") {
+          private$plot_box_plot(plot_data, plot_title, output_path)
+        } else {
+          stop("Invalid plot type specified. Use 'dot' or 'box'.")
+        }
+      },
 
-        ggsave(output_path, plot = p, width = 10, height = 8)
-      }
+    #' Plot Dot Plot
+    #'
+    #' @param plot_data   Data frame of cluster frequencies to be plotted.
+    #' @param plot_title  Title of the plot.
+    #' @param output_path File path to save the plot.
+    #' @param binwidth    Width of bins in the dot plot.
+    #'
+    #' @return            None. The function saves a dot plot to the specified
+    #'                    file path.
+    plot_dot_plot = function(plot_data, plot_title, output_path, binwidth) {
+      p <- ggplot(plot_data, aes(x = cluster, y = frequency, fill = type)) +
+        geom_dotplot(binaxis = "y", stackdir = "center",
+                     position = position_dodge(), binwidth = binwidth) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_blank(),
+              axis.line = element_line(colour = "black")) +
+        ggtitle(plot_title) +
+        theme(plot.title = element_text(size = 14, face = "bold"),
+              axis.title = element_text(size = 14, face = "bold"),
+              axis.text = element_text(size = 8),
+              legend.text = element_text(size = 10),
+              legend.title = element_text(size = 12),
+              strip.text.x = element_text(size = 12, face = "bold"))
+
+      ggsave(output_path, plot = p, width = 10, height = 8)
+    },
+    #' Plot Box Plot
+    #'
+    #' @param plot_data   Data frame of cluster frequencies to be plotted.
+    #' @param plot_title  Title of the plot.
+    #' @param output_path File path to save the plot.
+    #'
+    #' @return            None. The function saves a box plot to the specified
+    #'                    file path.
+    plot_box_plot = function(plot_data, plot_title, output_path) {
+      p <- ggplot(plot_data, aes(x = cluster, y = frequency, fill = type)) +
+        geom_boxplot(position = position_dodge()) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_blank(),
+              axis.line = element_line(colour = "black")) +
+        ggtitle(plot_title) +
+        theme(plot.title = element_text(size = 14, face = "bold"),
+              axis.title = element_text(size = 14, face = "bold"),
+              axis.text = element_text(size = 8),
+              legend.text = element_text(size = 10),
+              legend.title = element_text(size = 12),
+              strip.text.x = element_text(size = 12, face = "bold"))
+
+      ggsave(output_path, plot = p, width = 10, height = 8)
+    }
   )
 )
