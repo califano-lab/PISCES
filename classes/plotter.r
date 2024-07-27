@@ -178,7 +178,7 @@ Plotter <- R6Class( # nolint
       return(heatmap_plot)
     },
 
-    #' Plot Cluster Frequencies by Treatment
+    #' Plot Cluster Frequencies by Provided Metadata
     #'
     #' @param col_names        Vector of column names for the combined data
     #'                         frame.
@@ -190,14 +190,19 @@ Plotter <- R6Class( # nolint
     #'
     #' @return                 None. The function saves a plot to the specified
     #'                         directory.
-    plot_cluster_freq_by_treatment = function(col_names, plot_title,
-                                              group_by,
-                                              plot_type = "dot",
-                                              binwidth = 0.01) {
+    plot_cluster_freq_by = function(col_names, plot_title, group_by,
+                                    plot_type = "dot",
+                                    binwidth = 0.01) {
+      required_columns <- c("id", "seurat_clusters", group_by)
+      metadata_columns <-
+        private$check_and_get_metadata_columns(self$seurat_obj,
+                                               required_columns)
 
-      cluster_freq_table <-
-        table(self$seurat_obj$id, self$seurat_obj$seurat_clusters,
-              self$seurat_obj[[group_by]])
+      id_column <- metadata_columns[["id"]]
+      cluster_column <- metadata_columns[["seurat_clusters"]]
+      group_by_column <- metadata_columns[[group_by]]
+
+      cluster_freq_table <- table(id_column, cluster_column, group_by_column)
 
       early_data <-
         private$calculate_cluster_frequencies(cluster_freq_table, 1)
@@ -206,16 +211,13 @@ Plotter <- R6Class( # nolint
 
       combined_data <-
         private$combine_cluster_frequencies(early_data, late_data, col_names)
-
       plot_data <- private$melt_cluster_frequencies(combined_data)
 
       output_file <-
-        paste0("cluster_frequencies_by_treatment_", plot_type, ".png")
+        paste0("cluster_frequencies_by_", group_by, "_", plot_type, ".png")
       private$plot_cluster_frequencies(plot_data, plot_title,
-                                       file.path(
-                                         self$plot_output_path,
-                                         "cluster_frequencies_by_treatment.png"
-                                       ),
+                                       file.path(self$plot_output_path,
+                                                 output_file),
                                        binwidth, plot_type)
     }
   ),
@@ -536,6 +538,30 @@ Plotter <- R6Class( # nolint
       heatmap_plot_path <- file.path(self$plot_output_path, "gene_heatmap.png")
       ggsave(heatmap_plot_path, plot = heatmap_plot$gtable, width = plot_width,
              height = plot_height, limitsize = FALSE)
+    },
+
+    #' Filter and Subset Metadata Columns
+    #'
+    #' This function checks if the specified metadata columns are present in
+    #' the Seurat object and returns the columns as a named list.
+    #'
+    #' @param seurat_obj   A Seurat object containing metadata columns.
+    #' @param column_names A character vector of metadata column names.
+    #'
+    #' @return             A named list of metadata columns.
+    check_and_get_metadata_columns = function(seurat_obj, column_names) {
+      missing_columns <-
+        column_names[!column_names %in% colnames(seurat_obj@meta.data)]
+      if (length(missing_columns) > 0) {
+        stop(paste("The following columns are missing in ",
+                   "the Seurat object's metadata:",
+                   paste(missing_columns, collapse = ", ")))
+      }
+
+      metadata_columns <-
+        lapply(column_names, function(col) seurat_obj@meta.data[[col]])
+      names(metadata_columns) <- column_names
+      return(metadata_columns)
     },
 
     #' Calculate Cluster Frequencies
