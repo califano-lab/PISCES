@@ -330,10 +330,6 @@ Runner <- R6Class( # nolint
     #'
     #' @return             A list of VIPER results for each regulon object.
     run_viper_helper = function(exp_mat, regulon_list) {
-      # viper_results <- lapply(regulon_list, function(regulon) {
-      #   viper_scores <- private$execute_viper(exp_mat, regulon)
-      #   return(viper_scores)
-      # })
       viper_results <- private$execute_viper(exp_mat, regulon_list)
 
       # Check contents of viper_results
@@ -433,8 +429,8 @@ Runner <- R6Class( # nolint
     #' Run VIPER Analysis on a Single Regulon
     #'
     #' This function executes VIPER analysis on a single regulon using an
-    #' expression matrix. It handles errors during the execution and returns the
-    #' VIPER scores.
+    #' expression matrix. It handles errors during the execution and returns
+    #' the VIPER scores.
     #'
     #' @param exp_mat An expression matrix used for VIPER analysis.
     #' @param regulon_list A regulon list generated from ARACNe output.
