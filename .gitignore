@@ -11,3 +11,5 @@ standard-workflow.Rproj
 
 # Some of Luka's files
 future/
+colorectal_workflow.r
+plotting.r
