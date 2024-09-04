@@ -8,6 +8,8 @@ source("classes/plotter.r")
 source("classes/metacell_generator.r")
 source("classes/runner.r")
 
+options(future.globals.maxSize = 10 * 1024^3)
+
 ################## DEFINE YOUR LOCAL PATHS HERE ##################
 
 #' @todo define the path of the directory where each of the patient directories
@@ -72,7 +74,11 @@ patients <- list(
   list(id = "JD002", type = "Early"),
   list(id = "JD004", type = "Late"),
   list(id = "JD005", type = "Early"),
-  list(id = "JD006", type = "Late")
+  list(id = "JD006", type = "Late"),
+  list(id = "JD007", type = "Early"),
+  list(id = "JD008", type = "Late"),
+  list(id = "JD009", type = "Late"),
+  list(id = "JD010", type = "Late")
 )
 
 ################## DEFINE OTHER PREFERENCES #####################
@@ -189,8 +195,9 @@ metacell_matrices <- generator$generate_metacell_matrices()
 
 #' @todo define the column names and plot title for the cluster frequency plot
 col_names <-
-  c("Early_p1", "Early_p2", "Early_p3", "Early_p4", "Early_p5",
-    "Late_p1", "Late_p2", "Late_p3", "Late_p4", "Late_p5")
+  c("Early_p1", "Early_p2", "Early_p3", "Early_p4", "Early_p5", "Early_p6",
+    "Late_p1", "Late_p2", "Late_p3", "Late_p4", "Late_p5", "Late_p6",
+    "Late_p7", "Late_p8", "Late_p9")
 plot_title <- "Cluster Frequency by Early vs Late"
 
 # Plot cluster frequencies
@@ -209,7 +216,7 @@ runner <- Runner$new(
   regulator_files, integrated_seurat, viper_output_path, threads = 4, seed = 42
 )
 
-runner$run_aracne()
+# runner$run_aracne()
 runner$run_viper()
 
 rm(Runner, runner)
