@@ -39,6 +39,26 @@ Plotter <- R6Class( # nolint
       self$resolutions <- resolutions
     },
 
+    #' Plot Violin Plot
+    #'
+    #' This function plots a violin plot for a given feature and groups the
+    #' data by a specified metadata column. It saves the plot to the specified
+    #' output path.
+    #'
+    #' @param features A character vector of features to plot.
+    #' @param group_by A metadata column to group the data by.
+    #' @param pt_size  The size of the points in the plot. Defaults to 0.
+    #'
+    #' @return         None. The function saves the plot as a PNG file in the
+    #'                 specified directory.
+    plot_violin = function(features, group_by, pt_size = 0) {
+      p <-
+        VlnPlot(self$seurat_obj, features, group.by = group_by,
+                pt.size = pt_size)
+      ggsave(file.path(self$plot_output_path,
+                       paste0(features, "_violin_plot.png")), plot = p)
+    },
+
     #' Plot Silhouette Scores
     #'
     #' This function plots the mean silhouette scores with error bars for
