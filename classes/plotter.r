@@ -1,6 +1,7 @@
 library(R6)
 library(Seurat)
 library(ggplot2)
+library(plyr)
 
 #' Plotter Class for Visualizing Clustering Results
 #'
@@ -89,13 +90,11 @@ Plotter <- R6Class( # nolint
         self$cluster_labels <- self$cluster_labels[1:num_clusters]
       }
 
-      # Map numeric cluster IDs to the provided labels
-      self$seurat_obj$seurat_clusters <-
-        mapvalues(self$seurat_obj$seurat_clusters,
-                  from = seq_along(unique_clusters) - 1,
-                  to = self$cluster_labels)
+      label_mapping <- setNames(self$cluster_labels, unique_clusters)
+      self$seurat_obj@meta.data$seurat_clusters <-
+        plyr::mapvalues(self$seurat_obj@meta.data$seurat_clusters,
+                        from = unique_clusters, to = self$cluster_labels)
 
-      # Create and save the UMAP plot
       p <-
         DimPlot(self$seurat_obj, reduction = "umap",
                 group.by = "seurat_clusters", label = TRUE, label.size = 7,
