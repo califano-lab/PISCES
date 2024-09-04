@@ -20,8 +20,7 @@ source("classes/runner.r")
 #'
 #' @note: The directory should not contain any other directories/files than the
 #' patient directories/files!
-base_data_path <- paste0("/Users/apple/Documents/Research/aleks-lab/",
-                         "data/colorectal-data")
+base_data_path <- paste0("/path/to/data")
 
 #' @todo define the path of the of the data directory within each patient
 #' directory.
@@ -36,20 +35,18 @@ patient_data_path <- paste0("analysis/cellranger-count-default/",
                             "cellranger_count_outs/filtered_feature_bc_matrix")
 
 #' @todo define the path of the directory where you want all your output to go.
-base_output_path <- "/Users/apple/Desktop/test-output"
+base_output_path <- "/path/to/output"
 
 #' @todo define the path of your ARACNe3 binary executable on the machine you
 #' are running this script on.
 #'
 #' @note: It must be ARAcNe3, not ARACNe2.
-aracne_binary_path <- paste0("/Users/apple/Documents/Research/aleks-lab/",
-                             "repos/ARACNe3/build/src/app/",
+aracne_binary_path <- paste0("/path/to/ARACNe3/build/src/app/",
                              "ARACNe3_app_release")
 
 #' @todo define paths to regulator files, currently supported only in .txt
 #' format
-regulator_dir_path <- paste0("/Users/apple/Documents/Research/aleks-lab/",
-                             "data/regulators/human_hugo")
+regulator_dir_path <- paste0("/path/to/regulators/human_hugo")
 regulator_files <- list(
   cotfs = file.path(regulator_dir_path, "cotfs-hugo.txt"),
   surface = file.path(regulator_dir_path, "surface-hugo.txt"),
@@ -180,7 +177,7 @@ integrated_seurat <- plotter$seurat_obj
 
 # Save the integrated data
 saveRDS(integrated_seurat,
-        file = file.path(base_output_path, "colorectal_integrated.rds"))
+        file = file.path(base_output_path, "integrated_seurat.rds"))
 
 rm(Clusterer, clusterer)
 # =============================================================================
@@ -196,8 +193,11 @@ col_names <-
     "Late_p1", "Late_p2", "Late_p3", "Late_p4", "Late_p5")
 plot_title <- "Cluster Frequency by Early vs Late"
 
-# Plot cluster frequencies by treatment
-plotter$plot_cluster_freq_by_treatment(col_names, plot_title)
+# Plot cluster frequencies
+plotter$plot_cluster_freq_by(col_names, plot_title, group_by = "type",
+                             plot_type = "dot")
+plotter$plot_cluster_freq_by(col_names, plot_title, group_by = "type",
+                             plot_type = "box")
 
 rm(MetacellGenerator, generator)
 # =============================================================================
