@@ -13,3 +13,6 @@ standard-workflow.Rproj
 future/
 colorectal_workflow.r
 plotting.r
+
+# Mac OS
+.DS_Store
