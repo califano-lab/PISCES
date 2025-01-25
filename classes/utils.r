@@ -1,9 +1,35 @@
 library(R6)
 
+#' Utils Class
+#'
+#' The `Utils` class provides various utility functions for path
+#' creation/checking, distance matrix calculation, and other small helper tasks
+#' used throughout the pipeline.
 Utils <- R6Class( # nolint
   "Utils",
   public = list(
 
+    #' Initialize Utility Paths
+    #'
+    #' This method initializes paths for plotting, ARACNe, and VIPER output
+    #' directories based on the specified base paths. It also checks whether
+    #' certain required directories/files exist.
+    #'
+    #' @param base_data_path     A character string specifying the base path
+    #'                           containing patient data or other input files
+    #'                           for analysis.
+    #' @param base_output_path   A character string specifying the base path
+    #'                           for all output files/directories.
+    #' @param aracne_binary_path A character string specifying the path to the
+    #'                           ARACNe3 binary executable.
+    #' @param regulator_dir_path A character string specifying the path to the
+    #'                           directory containing regulator .txt files.
+    #'
+    #' @return A named list containing the following elements:
+    #'         - plot_output_path
+    #'         - plot_viper_output_path
+    #'         - aracne_output_path
+    #'         - viper_output_path
     init = function(base_data_path, base_output_path, aracne_binary_path,
                     regulator_dir_path) {
       plot_output_path <- file.path(base_output_path, "plots")
