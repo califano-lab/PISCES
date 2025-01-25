@@ -4,16 +4,18 @@ Utils <- R6Class( # nolint
   "Utils",
   public = list(
 
-    init = function(base_output_path, plot_output_path, aracne_output_path,
-                    viper_output_path, base_data_path, aracne_binary_path,
+    init = function(base_data_path, base_output_path, aracne_binary_path,
                     regulator_dir_path) {
       plot_output_path <- file.path(base_output_path, "plots")
+      plot_viper_output_path <-
+        file.path(plot_output_path, "reclustered_viper_plots")
       aracne_output_path <- file.path(base_output_path, "aracne_results")
       viper_output_path <- file.path(base_output_path, "viper_results")
 
       self$create_directories(c(
         base_output_path,
         plot_output_path,
+        plot_viper_output_path,
         aracne_output_path,
         viper_output_path
       ))
@@ -25,6 +27,7 @@ Utils <- R6Class( # nolint
 
       return(list(
         plot_output_path = plot_output_path,
+        plot_viper_output_path = plot_viper_output_path,
         aracne_output_path = aracne_output_path,
         viper_output_path = viper_output_path
       ))
