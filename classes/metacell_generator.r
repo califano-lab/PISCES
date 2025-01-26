@@ -52,6 +52,9 @@ MetacellGenerator <- R6Class( # nolint
       }
   ),
 
+  #############################################################################
+  #                           PRIVATE METHODS                                 #
+  #############################################################################
   private = list(
     #' Create Metacell Matrices for ARACNe Analysis
     #'

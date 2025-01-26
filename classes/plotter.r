@@ -241,6 +241,9 @@ Plotter <- R6Class( # nolint
     }
   ),
 
+  #############################################################################
+  #                           PRIVATE METHODS                                 #
+  #############################################################################
   private = list(
     #' Filter Blueprint Labels Based on P-values and Frequency
     #'
