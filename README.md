@@ -308,6 +308,6 @@ Thank you for your interest in contributing to the `standard-workflow`! Your sup
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](https://github.com/your-repo/main_workflow.r/blob/main/LICENSE) file for more information.
+This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for more information.
 
 [Back to Table of Contents](#table-of-contents)
