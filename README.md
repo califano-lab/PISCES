@@ -1,8 +1,57 @@
-# Standard Workflow Script for single-cell RNA-seq data
+# Table of Contents
+- [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Prerequisites](#prerequisites)
+    - [R](#r)
+      - [Windows](#windows)
+      - [macOS](#macos)
+      - [Linux](#linux)
+      - [GCC Requirement](#gcc-requirement)
+    - [R Packages](#r-packages)
+    - [ARACNe3](#aracne3)
+  - [Setup `main_workflow.r`](#setup-main_workflowr)
+    - [Define Your Local Paths](#define-your-local-paths)
+    - [Define Metadata](#define-metadata)
+    - [Define Other Preferences](#define-other-preferences)
+    - [Further Documentation](#further-documentation)
+  - [Contributing](#contributing)
+    - [How to Contribute](#how-to-contribute)
+    - [Code of Conduct](#code-of-conduct)
+    - [Reporting Issues](#reporting-issues)
+    - [License](#license)
+  - [License](#license-1)
 
 ## Overview
 
-This document provides detailed instructions for setting up and running the `main_workflow.r` script. This script processes single-cell RNA-seq data, performing data loading, preprocessing, integration, clustering, and analysis using ARACNe and VIPER.
+The **`main_workflow.r`** script provides a **comprehensive pipeline** for analyzing single-cell RNA-seq data—from raw reads all the way through to regulator-level inferences. Specifically, it:
+
+1. **Loads and Converts Data**  
+   - Handles data from either 10X feature-barcode matrices or `.rds` files (e.g., if you’ve already converted ensemble IDs to gene symbols).
+   - Assigns metadata (e.g., patient ID, sample type) to each cell.
+
+2. **Preprocesses and Normalizes**  
+   - Calculates common QC metrics (e.g., mitochondrial gene content, total RNA).
+   - Filters cells according to specified thresholds.
+   - Uses **SCTransform** for normalization and **SingleR** for preliminary cell-type annotations.
+
+3. **Integrates Multiple Datasets**  
+   - Supports either Seurat’s SCT-based integration or a **fastMNN** approach, enabling batch correction across multiple patients or conditions.
+
+4. **Clusters Cells**  
+   - Performs PCA/UMAP and identifies clusters at multiple resolutions.
+   - Finds an optimal clustering solution via **silhouette scores**.
+   - Labels clusters and pinpoints key marker genes.
+
+5. **Generates Metacells**  
+   - Constructs aggregated cell profiles (“metacells”) for each cluster, reducing noise and enhancing signal for downstream regulatory network analysis.
+
+6. **Runs ARACNe and VIPER**  
+   - Utilizes **ARACNe3** to infer gene regulatory networks from the metacell expression.
+   - Converts ARACNe outputs into regulon objects and applies **VIPER** to compute regulator activity scores.
+
+Each major step is encapsulated in a dedicated R6 class—e.g., `Loader` for data loading, `Preprocessor` for QC and normalization, `Clusterer` for clustering, `Plotter` for visualization, `MetacellGenerator` for creating metacells, and `Runner` for ARACNe/VIPER. By editing the **`main_workflow.r`** script’s configuration sections (e.g., paths, metadata), you can tailor every stage of the pipeline to your specific data and experimental needs.
+
+[Back to Table of Contents](#table-of-contents)
 
 ## Prerequisites
 
@@ -115,7 +164,9 @@ The ARACNe3 tool is required for network inference analysis. Follow the steps be
    ```
 5. After building, the ARACNe3 executable will be located in `build/src/app/`. Ensure you note this path, as you will need it to configure the `aracne_binary_path` in the `main_workflow.r` script.
 
-## Setup main_workflow.r
+[Back to Table of Contents](#table-of-contents)
+
+## Setup `main_workflow.r`
 
 To set up the `main_workflow.r` script, you need to define several paths and preferences. Follow the instructions below to configure your script correctly.
 
@@ -190,6 +241,12 @@ Edit the `main_workflow.r` script to set other preferences:
 
 By following these instructions, you should be able to set up and run the `main_workflow.r` script for any dataset. If you encounter any issues or have questions, please refer to the comments in the script or seek assistance from the project maintainers.
 
+### Further Documentation
+
+If you want a deeper dive into the classes and methods used throughout the pipeline (e.g., `Utils`, `Loader`, `Preprocessor`, `Integrator`, etc.), please refer to our [DOCS.md](./DOCS.md). That document provides a class-by-class breakdown of public methods, usage examples, and side effects.
+
+[Back to Table of Contents](#table-of-contents)
+
 ## Contributing
 
 We welcome contributions to improve and enhance the `standard-workflow`. If you have suggestions, bug reports, or would like to contribute code, please follow the guidelines below.
@@ -243,10 +300,14 @@ If you encounter any problems or have suggestions for improvements, please open 
 
 By contributing to this project, you agree that your contributions will be licensed under the MIT License.
 
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](https://github.com/your-repo/main_workflow.r/blob/main/LICENSE) file for more information.
-
 ---
 
 Thank you for your interest in contributing to the `standard-workflow`! Your support is greatly appreciated.
+
+[Back to Table of Contents](#table-of-contents)
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for more information.
+
+[Back to Table of Contents](#table-of-contents)

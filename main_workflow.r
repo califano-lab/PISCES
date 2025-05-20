@@ -8,7 +8,7 @@ source("classes/plotter.r")
 source("classes/metacell_generator.r")
 source("classes/runner.r")
 
-################## DEFINE YOUR LOCAL PATHS HERE ##################
+####################### DEFINE YOUR LOCAL PATHS HERE ##########################
 
 #' @todo define the path of the directory where each of the patient directories
 #' are located. For example if you had patient directories P1, P2,..., Pn. They
@@ -54,7 +54,7 @@ regulator_files <- list(
   tfs = file.path(regulator_dir_path, "tfs-hugo.txt")
 )
 
-################## DEFINE METADATA ##############################
+############################## DEFINE METADATA ################################
 
 #' @todo define any metadata you want.
 #
@@ -75,7 +75,7 @@ patients <- list(
   list(id = "JD006", type = "Late")
 )
 
-################## DEFINE OTHER PREFERENCES #####################
+########################### DEFINE OTHER PREFERENCES ##########################
 
 #' @todo set to TRUE to display verbose messages during the analysis
 my_verbose <- FALSE
@@ -85,11 +85,11 @@ my_verbose <- FALSE
 # =============================================================================
 
 utils <- Utils$new()
-paths <- utils$init(base_output_path, plot_output_path, aracne_output_path,
-                    viper_output_path, base_data_path, aracne_binary_path,
-                    regulator_dir_path)
+paths <- utils$init(base_data_path, base_output_path,
+                    aracne_binary_path, regulator_dir_path)
 
 plot_output_path <- paths$plot_output_path
+plot_viper_output_path <- paths$plot_viper_output_path
 aracne_output_path <- paths$aracne_output_path
 viper_output_path <- paths$viper_output_path
 
@@ -214,5 +214,62 @@ runner$run_viper()
 
 rm(Runner, runner)
 # =============================================================================
-# Step 7, ...: Re-clustering based on VIPER results, ... (SOON)
+# Step 7: Re-clustering Based on VIPER Results
 # =============================================================================
+
+viper_results <-
+  readRDS(file = file.path(viper_output_path, "viper_results.rds"))
+
+#' @note: The integrated Seurat object is reloaded here. If you've already
+#' retained it in your environment, you may skip this step.
+integrated_seurat <-
+  readRDS(file = file.path(base_output_path, "integrated_seurat.rds"))
+
+# Attach VIPER results as a new assay in the Seurat object
+integrated_seurat[["VIPER"]] <- CreateAssayObject(counts = viper_results)
+
+# Set the default assay to VIPER and scale the data
+DefaultAssay(integrated_seurat) <- "VIPER"
+integrated_seurat <- ScaleData(integrated_seurat,
+                               assay = "VIPER",
+                               verbose = my_verbose)
+
+# Perform PCA on the VIPER assay
+viper_features <- rownames(integrated_seurat[["VIPER"]])
+if (length(viper_features) < 2) {
+  stop("Not enough features in the VIPER assay to run PCA.")
+}
+integrated_seurat <- RunPCA(integrated_seurat,
+                            assay = "VIPER",
+                            verbose = my_verbose)
+
+# Re-cluster the data based on VIPER results
+clusterer_viper <- Clusterer$new(integrated_seurat, verbose = my_verbose)
+clusterer_viper$run_clustering()
+
+silhouette_results_viper <- clusterer_viper$calc_silhouette_scores()
+best_resolution_viper <- silhouette_results_viper$best_resolution
+
+integrated_seurat <- clusterer_viper$set_best_clusters(best_resolution_viper)
+
+top_genes_viper <- clusterer_viper$find_top_genes()
+
+saveRDS(integrated_seurat,
+        file = file.path(base_output_path,
+                         "integrated_seurat_viper_reclustered.rds"))
+
+#' @note: Congrats! You've successfully re-clustered your data based on VIPER
+#' results. You can now proceed with plotting. You wonder how to do that?
+#' Here's a template for you:
+
+# You can define cluster labels specifically for your VIPER-based
+# clustering here. For example:
+cluster_labels_viper <- c("VIPER_C1", "VIPER_C2", "VIPER_C3", ...)
+
+# For plotting you can use the same Plotter class as before, but with the new
+# cluster labels and the re-clustered Seurat object.
+plotter_viper <- Plotter$new(integrated_seurat,
+                             plot_viper_output_path,
+                             cluster_labels_viper)
+
+rm(Clusterer, clusterer_viper, Plotter, plotter_viper)

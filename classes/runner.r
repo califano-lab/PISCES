@@ -92,6 +92,9 @@ Runner <- R6Class( # nolint
     }
   ),
 
+  #############################################################################
+  #                           PRIVATE METHODS                                 #
+  #############################################################################
   private = list(
     #' Prepare and Save Expression Matrix for ARACNe Analysis
     #'

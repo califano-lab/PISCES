@@ -164,6 +164,9 @@ Clusterer <- R6Class( # nolint
     }
   ),
 
+  #############################################################################
+  #                           PRIVATE METHODS                                 #
+  #############################################################################
   private = list(
     #' Compute silhouette scores for multiple Louvain clusterings
     #'

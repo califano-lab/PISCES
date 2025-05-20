@@ -51,6 +51,9 @@ Converter <- R6Class( # nolint
     }
   ),
 
+  #############################################################################
+  #                           PRIVATE METHODS                                 #
+  #############################################################################
   private = list(
     #' Convert ENSEMBL IDs to Gene Names for a Data Frame
     #'

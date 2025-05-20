@@ -56,6 +56,9 @@ Loader <- R6Class( # nolint
     }
   ),
 
+  #############################################################################
+  #                           PRIVATE METHODS                                 #
+  #############################################################################
   private = list(
     #' Load Patient Data from RDS File into Seurat Object
     #'
