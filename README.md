@@ -9,11 +9,13 @@
       - [GCC Requirement](#gcc-requirement)
     - [R Packages](#r-packages)
     - [ARACNe3](#aracne3)
+    - [Conda Environment](#conda-environment)
   - [Setup `main_workflow.r`](#setup-main_workflowr)
     - [Define Your Local Paths](#define-your-local-paths)
     - [Define Metadata](#define-metadata)
     - [Define Other Preferences](#define-other-preferences)
     - [Further Documentation](#further-documentation)
+  - [Submitting via SLURM](#submitting-via-slurm)
   - [Contributing](#contributing)
     - [How to Contribute](#how-to-contribute)
     - [Code of Conduct](#code-of-conduct)
@@ -164,6 +166,15 @@ The ARACNe3 tool is required for network inference analysis. Follow the steps be
    ```
 5. After building, the ARACNe3 executable will be located in `build/src/app/`. Ensure you note this path, as you will need it to configure the `aracne_binary_path` in the `main_workflow.r` script.
 
+### Conda Environment
+
+We provide a `environment.yml` at the project root. To recreate the exact enviroment, run:
+
+```bash
+conda env create -f environment.yml
+conda activate r-env
+```
+
 [Back to Table of Contents](#table-of-contents)
 
 ## Setup `main_workflow.r`
@@ -244,6 +255,16 @@ By following these instructions, you should be able to set up and run the `main_
 ### Further Documentation
 
 If you want a deeper dive into the classes and methods used throughout the pipeline (e.g., `Utils`, `Loader`, `Preprocessor`, `Integrator`, etc.), please refer to our [DOCS.md](./DOCS.md). That document provides a class-by-class breakdown of public methods, usage examples, and side effects.
+
+[Back to Table of Contents](#table-of-contents)
+
+## Submitting via SLURM
+
+A convenience SLURM script (`submit_my_r_job.slurm`) lives at the repository root. To fire off the full workflow on an HPC cluster:
+
+```bash
+sbatch submit_my_r_job.slurm
+```
 
 [Back to Table of Contents](#table-of-contents)
 
