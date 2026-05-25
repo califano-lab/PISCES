@@ -230,17 +230,22 @@ integrated_seurat[["VIPER"]] <- CreateAssayObject(counts = viper_results)
 
 # Set the default assay to VIPER and scale the data
 DefaultAssay(integrated_seurat) <- "VIPER"
-integrated_seurat <- ScaleData(integrated_seurat,
-                               assay = "VIPER",
-                               verbose = my_verbose)
 
-# Perform PCA on the VIPER assay
 viper_features <- rownames(integrated_seurat[["VIPER"]])
 if (length(viper_features) < 2) {
   stop("Not enough features in the VIPER assay to run PCA.")
 }
+VariableFeatures(integrated_seurat, assay = "VIPER") <- viper_features
+
+integrated_seurat <- ScaleData(integrated_seurat,
+                               assay = "VIPER",
+                               features = viper_features,
+                               verbose = my_verbose)
+
+# Perform PCA on the VIPER assay
 integrated_seurat <- RunPCA(integrated_seurat,
                             assay = "VIPER",
+                            features = viper_features,
                             verbose = my_verbose)
 
 # Re-cluster the data based on VIPER results
