@@ -96,7 +96,14 @@ Plotter <- R6Class( # nolint
     #'
     #' @return The Seurat object with updated cluster labels.
     plot_umap_clusters = function() {
-      unique_clusters <- unique(self$seurat_obj$seurat_clusters)
+      # levels(droplevels(...)), NOT unique(). unique() on a factor returns
+      # values in ORDER OF FIRST APPEARANCE, so "Cluster1..N" was assigned by
+      # whichever cluster happened to own the first cell - making the labels
+      # non-deterministic across runs and impossible to join reliably against
+      # the numeric seurat_clusters used in viper_cluster_markers.csv. Since
+      # plot_umap_clusters WRITES these labels back over seurat_clusters
+      # (mapvalues below), that mislabels the saved object, not just the figure.
+      unique_clusters <- levels(droplevels(factor(self$seurat_obj$seurat_clusters)))
       num_clusters <- length(unique_clusters)
 
       # Ensure the number of provided labels matches the number of clusters
@@ -160,9 +167,30 @@ Plotter <- R6Class( # nolint
     #' @return                        Heatmap plot.
     plot_gene_heatmap = function(genes, genes_by_cluster = TRUE,
                                  n_top_genes_per_cluster = 5,
-                                 color_palette = NULL, scaled = TRUE) {
+                                 color_palette = NULL, scaled = TRUE,
+                                 assay = NULL, max_cells = 10000) {
+      # assay was HARDCODED to "SCT". That is right in Step 4 and wrong in
+      # Step 7, where find_top_genes returns VIPER proteins but the heatmap
+      # looked their names up in SCT gene expression - so the figure showed
+      # Pearson residuals of the TF genes, not NES. Two visible symptoms in job
+      # 71416: mostly-blue with sparse red (TFs are lowly expressed, so most
+      # cells sit at the residual floor), and an asymmetric ~-1..+4 colour scale
+      # (Pearson residuals are bounded below and right-skewed, whereas z-scored
+      # NES is roughly symmetric). It also silently dropped 17 proteins absent
+      # from SCT - "Excluded genes: CCL4L2, PRDX2, ID3, ..." - which is the
+      # signature of matching against the wrong assay, since every protein is
+      # present in the VIPER assay by construction.
+      #
+      # Same class of bug as the hardcoded "integrated_snn_res." in Clusterer.
+      if (is.null(assay)) assay <- DefaultAssay(self$seurat_obj)
       data_mat <-
-        GetAssayData(self$seurat_obj, assay = "SCT", layer = "scale.data")
+        GetAssayData(self$seurat_obj, assay = assay, layer = "scale.data")
+      if (is.null(data_mat) || nrow(data_mat) == 0) {
+        stop("Assay '", assay, "' has no scale.data. Run ScaleData on it ",
+             "before plotting, or pass a different `assay`.")
+      }
+      message(sprintf("  heatmap: assay '%s', %d x %d scale.data",
+                      assay, nrow(data_mat), ncol(data_mat)))
       clusters <- self$seurat_obj$seurat_clusters
 
       if (length(unique(clusters)) == 0) {
@@ -173,7 +201,7 @@ Plotter <- R6Class( # nolint
       my_color_palette <-
         private$generate_color_palette(identities, color_palette)
       genes_in_data <- private$filter_genes(genes, data_mat)
-      subset_mat <- private$subset_data(data_mat, genes_in_data)
+      subset_mat <- private$subset_data(data_mat, genes_in_data, max_cells)
       cluster_data <- private$prepare_cluster_data(clusters, subset_mat)
       cluster_df <- cluster_data$cluster_df
       subset_mat <- cluster_data$subset_mat
@@ -199,19 +227,36 @@ Plotter <- R6Class( # nolint
 
     #' Plot Cluster Frequencies by Provided Metadata
     #'
-    #' @param col_names        Vector of column names for the combined data
-    #'                         frame.
     #' @param plot_title       Title of the plot.
-    #' @param group_by         Metadata label to group by.
+    #' @param group_by         Metadata label to group by. Any number of levels
+    #'                         is supported.
     #' @param plot_type        Type of plot: "dot" for dot plot or "box" for
     #'                         box-whisker plot.
     #' @param binwidth         Width of bins in the dot plot.
+    #' @param group_levels     Optional character vector fixing the order the
+    #'                         groups appear in the legend and on the x axis.
+    #'                         Defaults to the order in the data. Levels named
+    #'                         here that are absent from the data are dropped
+    #'                         with a warning rather than producing empty
+    #'                         dodge slots.
     #'
     #' @return                 None. The function saves a plot to the specified
     #'                         directory.
-    plot_cluster_freq_by = function(col_names, plot_title, group_by,
+    #'
+    #' @note GENERALISED FROM TWO GROUPS TO N. This previously took the 1st and
+    #'       2nd slices of the id x cluster x group table and combined them as
+    #'       "early"/"late", so a third level was silently discarded - on this
+    #'       project's neutrophil data, `type` is adjacentNormal/normal/tumor
+    #'       and the 18 tumor Origins would have vanished from the figure with
+    #'       no error. The `col_names` argument is also gone: it existed only
+    #'       to smuggle the group label into a column name for melt() to
+    #'       recover by splitting on "_", which broke on any id containing an
+    #'       underscore and had to be kept in sync with the patient count by
+    #'       hand. Group membership is now carried directly.
+    plot_cluster_freq_by = function(plot_title, group_by,
                                     plot_type = "dot",
-                                    binwidth = 0.01) {
+                                    binwidth = 0.01,
+                                    group_levels = NULL) {
       required_columns <- c("id", "seurat_clusters", group_by)
       metadata_columns <-
         private$check_and_get_metadata_columns(self$seurat_obj,
@@ -222,15 +267,12 @@ Plotter <- R6Class( # nolint
       group_by_column <- metadata_columns[[group_by]]
 
       cluster_freq_table <- table(id_column, cluster_column, group_by_column)
+      plot_data <- private$cluster_freq_long(cluster_freq_table, group_levels)
 
-      early_data <-
-        private$calculate_cluster_frequencies(cluster_freq_table, 1)
-      late_data <-
-        private$calculate_cluster_frequencies(cluster_freq_table, 2)
-
-      combined_data <-
-        private$combine_cluster_frequencies(early_data, late_data, col_names)
-      plot_data <- private$melt_cluster_frequencies(combined_data)
+      message(sprintf("Cluster frequency by '%s': %d group(s) [%s], %d id(s)",
+                      group_by, nlevels(plot_data$type),
+                      paste(levels(plot_data$type), collapse = ", "),
+                      length(unique(plot_data$id))))
 
       output_file <-
         paste0("cluster_frequencies_by_", group_by, "_", plot_type, ".png")
@@ -337,9 +379,16 @@ Plotter <- R6Class( # nolint
     #' @throws              Error if the number of rows in the subsetted data
     #'                      matrix does not match the number of specified
     #'                      genes.
-    subset_data = function(data_mat, genes_in_data) {
+    subset_data = function(data_mat, genes_in_data, max_cells = 10000,
+                           seed = 1234) {
+      # Seeded so the same object redraws the same figure. Unseeded, every run
+      # picked a different 10,000 columns.
+      set.seed(seed)
+      # Columns are subsampled, as in scripts/archive/viper_global.R. At 49,142
+      # (neutrophil) or 203,516 (macrophage) cells every column is well under a
+      # pixel wide, so the figure shows aliasing rather than structure.
       i <-
-        sample(seq_len(ncol(data_mat)), min(10000, ncol(data_mat)),
+        sample(seq_len(ncol(data_mat)), min(max_cells, ncol(data_mat)),
                replace = FALSE)
       subset_mat <- data_mat[genes_in_data, i]
       if (nrow(subset_mat) != length(genes_in_data)) {
@@ -592,14 +641,89 @@ Plotter <- R6Class( # nolint
     #' @param treatment_index Index of the treatment type.
     #'
     #' @return A data frame of normalized cluster frequencies.
+    #' @note drop = FALSE is required. With a single id contributing to a group
+    #'       the subset would collapse to a vector and apply() would then fail
+    #'       or silently transpose. Groups contributed by one id are normal
+    #'       here - several Origins are the only member of their Status.
     calculate_cluster_frequencies = function(cluster_freq_table,
                                              treatment_index) {
-      freq_data <- as.data.frame.matrix(cluster_freq_table[, , treatment_index])
-      freq_data <- freq_data[rowSums(freq_data) > 0, ]
+      freq_data <- as.data.frame.matrix(
+        cluster_freq_table[, , treatment_index, drop = FALSE][, , 1])
+      freq_data <- freq_data[rowSums(freq_data) > 0, , drop = FALSE]
+      if (nrow(freq_data) == 0) {
+        return(NULL)
+      }
+      # apply over rows returns clusters x ids (apply transposes).
       freq_data <- apply(freq_data, 1, function(x) {
         x / sum(x)
       })
+      if (is.null(dim(freq_data))) {
+        freq_data <- matrix(freq_data, ncol = 1,
+                            dimnames = list(colnames(
+                              cluster_freq_table[, , treatment_index,
+                                                 drop = FALSE][, , 1]),
+                              rownames(freq_data)))
+      }
       return(freq_data)
+    },
+
+    #' Build a Long Data Frame of Per-Id Cluster Frequencies Across All Groups
+    #'
+    #' Replaces the old combine_cluster_frequencies + melt_cluster_frequencies
+    #' pair, which only handled two groups and encoded group membership in
+    #' column names.
+    #'
+    #' @param cluster_freq_table A 3-way table of id x cluster x group.
+    #' @param group_levels       Optional ordering for the group factor.
+    #'
+    #' @return                   Data frame with columns cluster, type,
+    #'                           frequency, id. One row per id per cluster per
+    #'                           group the id contributes to.
+    cluster_freq_long = function(cluster_freq_table, group_levels = NULL) {
+      levels_present <- dimnames(cluster_freq_table)[[3]]
+      if (is.null(levels_present)) {
+        stop("The grouping variable produced no levels.")
+      }
+
+      pieces <- lapply(seq_along(levels_present), function(k) {
+        freq <- private$calculate_cluster_frequencies(cluster_freq_table, k)
+        if (is.null(freq)) {
+          return(NULL)
+        }
+        # freq is clusters x ids
+        data.frame(
+          cluster = rep(rownames(freq), times = ncol(freq)),
+          type = levels_present[k],
+          frequency = as.vector(freq),
+          id = rep(colnames(freq), each = nrow(freq)),
+          stringsAsFactors = FALSE
+        )
+      })
+
+      empty <- levels_present[vapply(pieces, is.null, logical(1))]
+      if (length(empty) > 0) {
+        warning("No cells for group(s): ", paste(empty, collapse = ", "))
+      }
+      out <- do.call(rbind, pieces)
+      if (is.null(out) || nrow(out) == 0) {
+        stop("No cluster frequencies could be computed for any group.")
+      }
+
+      keep <- intersect(if (is.null(group_levels)) levels_present
+                        else group_levels,
+                        unique(out$type))
+      if (!is.null(group_levels)) {
+        unknown <- setdiff(group_levels, unique(out$type))
+        if (length(unknown) > 0) {
+          warning("group_levels not present in the data, dropped: ",
+                  paste(unknown, collapse = ", "))
+        }
+      }
+      out <- out[out$type %in% keep, , drop = FALSE]
+      out$type <- factor(out$type, levels = keep)
+      out$cluster <- factor(out$cluster,
+                            levels = dimnames(cluster_freq_table)[[2]])
+      return(out)
     },
 
     #' Combine Cluster Frequencies
