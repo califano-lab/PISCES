@@ -237,10 +237,27 @@ if (length(viper_features) < 2) {
 }
 VariableFeatures(integrated_seurat, assay = "VIPER") <- viper_features
 
-integrated_seurat <- ScaleData(integrated_seurat,
-                               assay = "VIPER",
-                               features = viper_features,
-                               verbose = my_verbose)
+# ScaleData is deliberately NOT called on the VIPER assay.
+#
+# aREA already returns NES: a z-like statistic, comparable across regulators and
+# cells, sign-interpretable, positive = active. ScaleData z-scores each protein
+# ACROSS cells, which is a second normalisation of an already-normalised
+# quantity. It forces every regulator to mean 0 and sd 1, so a protein that is
+# genuinely active in most cells is flattened to look average, and a uniformly
+# inactive one is inflated into apparent structure. Measured on a 4,804-protein
+# x 203,516-cell object, the SD of per-protein means went 0.214 -> 0.000: the
+# baseline-activity differences that make protein activity worth computing are
+# exactly what gets removed.
+#
+# The heatmap and PCA both read scale.data, so it still has to be populated -
+# with raw NES rather than a rescaling of it.
+nes <- LayerData(integrated_seurat, assay = "VIPER", layer = "counts")
+integrated_seurat <- SetAssayData(integrated_seurat, assay = "VIPER",
+                                  layer = "data", new.data = nes)
+integrated_seurat <- SetAssayData(integrated_seurat, assay = "VIPER",
+                                  layer = "scale.data",
+                                  new.data = as.matrix(nes))
+rm(nes)
 
 # Perform PCA on the VIPER assay
 integrated_seurat <- RunPCA(integrated_seurat,
