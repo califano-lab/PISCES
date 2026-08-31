@@ -73,19 +73,42 @@ Plotter <- R6Class( # nolint
     #' @return            None. The function saves the plot as a PNG file in
     #'                    the specified directory.
     plot_silhouette_scores = function(mean_scores, sd_scores) {
+      # Open the PNG device FIRST and draw into it, rather than drawing to the
+      # default device and dev.copy()ing afterwards.
+      #
+      # The old order silently produced nothing under Rscript. Non-interactive R
+      # has no screen device, so errbar() opened the fallback pdf and every
+      # silhouette plot this project ever made accumulated in a stray Rplots.pdf
+      # in the working directory - silhouette_scores.png existed nowhere in the
+      # output tree. The per-resolution scores were therefore unrecoverable after
+      # a run, since resume_from_step6.r logs only the winning resolution, and
+      # each configuration had to be re-scored from its saved object just to see
+      # its own sweep.
+      #
+      # on.exit(add = TRUE) guarantees the device closes even if errbar or legend
+      # errors, which would otherwise leave a truncated PNG and a dangling device.
+      plot_path <- file.path(self$plot_output_path, "silhouette_scores.png")
+      png(plot_path, width = 1000, height = 750, res = 120)
+      on.exit(dev.off(), add = TRUE)
+
       errbar(self$resolutions, mean_scores, mean_scores + sd_scores,
              mean_scores - sd_scores, ylab = "Mean Silhouette Score",
              xlab = "Resolution Parameter")
       lines(self$resolutions, mean_scores)
 
+      # na.rm: a resolution that collapsed to a single cluster scores NA, not 0.
       best_resolution <-
-        tail(self$resolutions[which(mean_scores == max(mean_scores))], n = 1)
+        tail(self$resolutions[which(mean_scores == max(mean_scores, na.rm = TRUE))], n = 1)
       legend("topright",
              paste("Best Resolution", best_resolution, sep = " = "))
 
-      plot_path <- file.path(self$plot_output_path, "silhouette_scores.png")
-      dev.copy(png, filename = plot_path)
-      dev.off()
+      # The numbers themselves, so a run records its own sweep and no re-score is
+      # needed to read it back.
+      message("  silhouette sweep -> ", plot_path)
+      for (i in seq_along(self$resolutions))
+        message(sprintf("    res %-4s  %.4f +/- %.4f", self$resolutions[i],
+                        mean_scores[i], sd_scores[i]))
+      invisible(plot_path)
     },
 
     #' Plot UMAP Clusters
