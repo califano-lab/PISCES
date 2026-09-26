@@ -1226,20 +1226,15 @@ Visualizes how often clusters appear across different **group_by** categories (e
 **Usage**  
 ```r
 plotter$plot_cluster_freq_by(
-  col_names,
   plot_title,
   group_by,
   plot_type = "dot",
-  binwidth = 0.01
+  binwidth = 0.01,
+  group_levels = NULL
 )
 ```
 
 **Arguments**  
-- `col_names`  
-  A **character vector** specifying column names for early/late data merges. E.g.:
-  ```r
-  c("Early_p1", "Early_p2", ..., "Late_p1", "Late_p2", ...)
-  ```
 - `plot_title`  
   A **character** string for the plot’s title.
 - `group_by`  
@@ -1248,11 +1243,13 @@ plotter$plot_cluster_freq_by(
   A **character** either `"dot"` or `"box"` specifying the plot style. Defaults to `"dot"`.
 - `binwidth`  
   A **numeric** controlling the bin width for the dot plot. Defaults to `0.01`.
+- `group_levels`  
+  An optional **character vector** fixing the order of the groups (e.g. `c("Early", "Late")`). Defaults to the order in the data; levels absent from the data are dropped with a warning.
 
 **Details**  
 1. Validates required metadata columns (`id`, `seurat_clusters`, and `group_by`).  
 2. Constructs a **frequency table** of cluster occurrences under each group.  
-3. Merges early/late (or other categories) into a single data frame.  
+3. Computes per-`id` cluster proportions for every level of `group_by` (any number of levels).  
 4. Draws either a **dot plot** or **box plot**, saving to `plot_output_path`.
 
 **Value / Return**  
@@ -1297,9 +1294,9 @@ top_markers <- c("CD3D", "CD3E", "MS4A1", "CD79A", "EPCAM")
 plotter$plot_gene_heatmap(genes = top_markers, scaled = TRUE)
 
 # 7. Display cluster frequencies across "type" (e.g., Early vs. Late)
-col_names <- c("Early_p1","Early_p2","Late_p1","Late_p2")
-plotter$plot_cluster_freq_by(col_names, plot_title = "Cluster Frequency",
-                             group_by = "type", plot_type = "dot")
+plotter$plot_cluster_freq_by(plot_title = "Cluster Frequency",
+                             group_by = "type", plot_type = "dot",
+                             group_levels = c("Early", "Late"))
 
 # 8. Cleanup
 rm(plotter)

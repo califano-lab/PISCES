@@ -9,12 +9,17 @@ library(R6)
 #' @field base_data_path The base path to the data directory.
 #' @field patient_data_path The relative path to the data directory within each
 #'        patient directory.
+#' @field min_cells Genes must be detected in at least this many cells WITHIN
+#'        a patient to be kept.
+#' @field min_features Cells must express at least this many genes to be kept.
 Loader <- R6Class( # nolint
   "Loader",
   public = list(
     patients = NULL,
     base_data_path = NULL,
     patient_data_path = NULL,
+    min_cells = 0,
+    min_features = 0,
 
     #' Initialize the Loader
     #'
@@ -22,10 +27,42 @@ Loader <- R6Class( # nolint
     #' @param base_data_path    The base path to the data directory.
     #' @param patient_data_path The relative path to the data directory within
     #'                          each patient directory.
-    initialize = function(patients, base_data_path, patient_data_path) {
+    #' @param min_cells         CreateSeuratObject min.cells. Applied PER
+    #'                          PATIENT, so it is a much harsher filter for a
+    #'                          small patient than a large one. Defaults to 0.
+    #' @param min_features      CreateSeuratObject min.features. Defaults to 0.
+    #'
+    #' @note THESE WERE HARD-CODED AT min.cells = 50, min.features = 200, and
+    #'       that combination silently destroys small patients. CreateSeuratObject
+    #'       filters GENES FIRST, then cells. Measured on this project's 25
+    #'       neutrophil Origins:
+    #'
+    #'         Origin      cells  genes detected  surviving min.cells = 50
+    #'         GSE241184     101            6550                        83
+    #'         GSE184198     139            5622                       148
+    #'         GSE215403     159            7656                       223
+    #'         TS          17217           15517                     10728
+    #'
+    #'       A 101-cell patient keeps 83 genes, and min.features = 200 then
+    #'       requires every cell to express 200 genes that no longer exist - so
+    #'       every cell is dropped and the patient becomes an empty object.
+    #'
+    #'       It also collapses the shared gene space that integration needs:
+    #'       across eight of these Origins the intersection is 44 genes at
+    #'       min.cells = 50 versus 1,454 at min.cells = 3. SelectIntegrationFeatures
+    #'       cannot return more anchors than that intersection allows, so raising
+    #'       nfeatures has no effect while this is set high.
+    #'
+    #'       Defaults are now 0 because gene and cell filtering belong upstream,
+    #'       where they can be applied to the whole cohort at once rather than
+    #'       per patient. Raise them only for genuinely raw input.
+    initialize = function(patients, base_data_path, patient_data_path,
+                          min_cells = 0, min_features = 0) {
       self$patients <- patients
       self$base_data_path <- base_data_path
       self$patient_data_path <- patient_data_path
+      self$min_cells <- min_cells
+      self$min_features <- min_features
     },
 
     #' Load Data for All Patients
@@ -110,7 +147,18 @@ Loader <- R6Class( # nolint
     #' @return             A Seurat object with loaded data and metadata.
     create_seurat_object = function(data, patient) {
       seurat_object <-
-        CreateSeuratObject(counts = data, min.features = 200, min.cells = 50)
+        CreateSeuratObject(counts = data,
+                           min.features = self$min_features,
+                           min.cells = self$min_cells)
+      if (ncol(seurat_object) == 0) {
+        stop("Patient ", patient$id, " has 0 cells after CreateSeuratObject ",
+             "(min.cells = ", self$min_cells, ", min.features = ",
+             self$min_features, "). Genes are filtered before cells, so a high ",
+             "min.cells on a small patient can leave fewer genes than ",
+             "min.features requires.")
+      }
+      message(sprintf("  %s: %d cells x %d genes", patient$id,
+                      ncol(seurat_object), nrow(seurat_object)))
       seurat_object <- RenameCells(seurat_object, add.cell.id = patient$id)
 
       # Add each metadata field to the Seurat object
