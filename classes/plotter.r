@@ -663,38 +663,26 @@ Plotter <- R6Class( # nolint
     #' @param cluster_freq_table Table of cluster frequencies.
     #' @param treatment_index Index of the treatment type.
     #'
-    #' @return A data frame of normalized cluster frequencies.
-    #' @note drop = FALSE is required. With a single id contributing to a group
-    #'       the subset would collapse to a vector and apply() would then fail
-    #'       or silently transpose. Groups contributed by one id are normal
-    #'       here - several Origins are the only member of their Status.
+    #' @return A clusters x ids matrix of per-id cluster proportions (each
+    #'         column sums to 1), or NULL if no id has cells in this group.
+    #' @note Every subset keeps its dimensions explicitly. A group contributed
+    #'       by a single id is normal here - several Origins are the only
+    #'       member of their Status - and so is a single cluster, so neither
+    #'       may collapse the matrix to a vector.
     calculate_cluster_frequencies = function(cluster_freq_table,
                                              treatment_index) {
-      freq_data <- as.data.frame.matrix(
-        cluster_freq_table[, , treatment_index, drop = FALSE][, , 1])
-      freq_data <- freq_data[rowSums(freq_data) > 0, , drop = FALSE]
-      if (nrow(freq_data) == 0) {
+      counts <- matrix(unclass(cluster_freq_table)[, , treatment_index],
+                       nrow = dim(cluster_freq_table)[1],
+                       ncol = dim(cluster_freq_table)[2],
+                       dimnames = dimnames(cluster_freq_table)[1:2])
+      counts <- counts[rowSums(counts) > 0, , drop = FALSE]
+      if (nrow(counts) == 0) {
         return(NULL)
       }
-      # apply over rows returns clusters x ids (apply transposes).
-      freq_data <- apply(freq_data, 1, function(x) {
-        x / sum(x)
-      })
-      if (is.null(dim(freq_data))) {
-        freq_data <- matrix(freq_data, ncol = 1,
-                            dimnames = list(colnames(
-                              cluster_freq_table[, , treatment_index,
-                                                 drop = FALSE][, , 1]),
-                              rownames(freq_data)))
-      }
-      return(freq_data)
+      return(t(counts / rowSums(counts)))
     },
 
     #' Build a Long Data Frame of Per-Id Cluster Frequencies Across All Groups
-    #'
-    #' Replaces the old combine_cluster_frequencies + melt_cluster_frequencies
-    #' pair, which only handled two groups and encoded group membership in
-    #' column names.
     #'
     #' @param cluster_freq_table A 3-way table of id x cluster x group.
     #' @param group_levels       Optional ordering for the group factor.
@@ -747,38 +735,6 @@ Plotter <- R6Class( # nolint
       out$cluster <- factor(out$cluster,
                             levels = dimnames(cluster_freq_table)[[2]])
       return(out)
-    },
-
-    #' Combine Cluster Frequencies
-    #'
-    #' @param early_data Data frame of early treatment cluster frequencies.
-    #' @param late_data Data frame of late treatment cluster frequencies.
-    #' @param col_names Vector of column names for the combined data frame.
-    #'
-    #' @return A combined data frame of early and late treatment cluster
-    #'         frequencies.
-    combine_cluster_frequencies = function(early_data, late_data, col_names) {
-      combined <- cbind(early_data, late_data)
-      colnames(combined) <- col_names
-      return(combined)
-    },
-
-    #' Melt Cluster Frequencies
-    #'
-    #' @param combined_data Combined data frame of cluster frequencies.
-    #'
-    #' @return A melted data frame suitable for plotting.
-    melt_cluster_frequencies = function(combined_data) {
-      melted_data <- melt(combined_data)
-      colnames(melted_data) <- c("cluster", "type", "frequency")
-      melted_data$type <- unlist(
-        lapply(strsplit(as.character(melted_data$type), "_"), function(x) {
-          x[1]
-        })
-      )
-      melted_data$type <- factor(melted_data$type, levels = c("Early", "Late"))
-      melted_data$cluster <- as.factor(melted_data$cluster)
-      return(melted_data)
     },
 
     #' Plot Cluster Frequencies

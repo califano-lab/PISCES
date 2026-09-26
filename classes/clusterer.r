@@ -164,27 +164,6 @@ Clusterer <- R6Class( # nolint
       return(self$seurat_obj)
     },
 
-    #' Find top genes for each cluster
-    #'
-    #' This function identifies the top marker genes for each cluster in the
-    #' integrated Seurat object. It uses the scaled gene expression data to
-    #' perform differential expression analysis between each cluster and all
-    #' other cells, and selects the top genes based on the specified log fold
-    #' change threshold.
-    #'
-    #' @param assay_name      The name of the assay to use for finding markers.
-    #' @param n_top_genes     The number of top genes to find for each cluster.
-    #' @param logfc_threshold The log fold change threshold for marker genes.
-    #'
-    #' @return                A data frame containing the top marker genes for
-    #'                        each cluster. The data frame includes the
-    #'                        following columns:
-    #'                        - `gene`:       The gene name.
-    #'                        - `cluster`:    The cluster for which the gene is
-    #'                                        a marker.
-    #'                        - `avg_log2FC`: The average log2 fold change of
-    #'                                        the gene in the cluster compared
-    #'                                        to all other cells.
     #' Find Top Master Regulators per Cluster (VIPER / NES data)
     #'
     #' The NES counterpart of find_top_genes, following
@@ -224,7 +203,7 @@ Clusterer <- R6Class( # nolint
                                 logfc.threshold = 0,
                                 test.use = "t",
                                 max.cells.per.ident = max_cells_per_ident,
-                                random.seed = 1234,
+                                random.seed = self$seed,
                                 mean.fxn = function(x) rowMeans(x),
                                 fc.name = "avg_diff",
                                 verbose = self$verbose)
@@ -244,6 +223,30 @@ Clusterer <- R6Class( # nolint
       return(list(top = top, all = markers))
     },
 
+    #' Find top genes for each cluster
+    #'
+    #' This function identifies the top marker genes for each cluster in the
+    #' integrated Seurat object. It uses the scaled gene expression data to
+    #' perform differential expression analysis between each cluster and all
+    #' other cells, and selects the top genes based on the specified log fold
+    #' change threshold.
+    #'
+    #' @param assay_name      The name of the assay to use for finding markers.
+    #'                        Defaults to DefaultAssay, which after integration
+    #'                        is "integrated" - pass "SCT" explicitly for gene
+    #'                        expression markers.
+    #' @param n_top_genes     The number of top genes to find for each cluster.
+    #' @param logfc_threshold The log fold change threshold for marker genes.
+    #'
+    #' @return                A data frame containing the top marker genes for
+    #'                        each cluster. The data frame includes the
+    #'                        following columns:
+    #'                        - `gene`:       The gene name.
+    #'                        - `cluster`:    The cluster for which the gene is
+    #'                                        a marker.
+    #'                        - `avg_log2FC`: The average log2 fold change of
+    #'                                        the gene in the cluster compared
+    #'                                        to all other cells.
     find_top_genes = function(assay_name = NULL, n_top_genes = 5,
                               logfc_threshold = 0.25) {
       if (is.null(assay_name)) assay_name <- DefaultAssay(self$seurat_obj)

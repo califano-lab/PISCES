@@ -155,7 +155,7 @@ best_resolution <- silhouette_results$best_resolution
 integrated_seurat <- clusterer$set_best_clusters(best_resolution)
 
 # Find top genes per cluster
-top_genes <- clusterer$find_top_genes()
+top_genes <- clusterer$find_top_genes(assay_name = "SCT")
 
 # Plotting
 plotter <- Plotter$new(integrated_seurat, plot_output_path, cluster_labels)
@@ -168,7 +168,7 @@ plotter$plot_silhouette_scores(silhouette_results$mean_scores,
 plotter$plot_umap_clusters()
 
 # Plot gene heatmap
-plotter$plot_gene_heatmap(top_genes$gene)
+plotter$plot_gene_heatmap(top_genes$gene, assay = "SCT")
 
 # Plot UMAP with refined labels
 plotter$plot_umap_with_labels()
@@ -187,17 +187,15 @@ rm(Clusterer, clusterer)
 generator <- MetacellGenerator$new(integrated_seurat, base_output_path)
 metacell_matrices <- generator$generate_metacell_matrices()
 
-#' @todo define the column names and plot title for the cluster frequency plot
-col_names <-
-  c("Early_p1", "Early_p2", "Early_p3", "Early_p4", "Early_p5",
-    "Late_p1", "Late_p2", "Late_p3", "Late_p4", "Late_p5")
+#' @todo define the plot title and the order of the `type` groups
 plot_title <- "Cluster Frequency by Early vs Late"
+group_levels <- c("Early", "Late")
 
 # Plot cluster frequencies
-plotter$plot_cluster_freq_by(col_names, plot_title, group_by = "type",
-                             plot_type = "dot")
-plotter$plot_cluster_freq_by(col_names, plot_title, group_by = "type",
-                             plot_type = "box")
+plotter$plot_cluster_freq_by(plot_title, group_by = "type", plot_type = "dot",
+                             group_levels = group_levels)
+plotter$plot_cluster_freq_by(plot_title, group_by = "type", plot_type = "box",
+                             group_levels = group_levels)
 
 rm(MetacellGenerator, generator)
 # =============================================================================
@@ -228,7 +226,7 @@ integrated_seurat <-
 # Attach VIPER results as a new assay in the Seurat object
 integrated_seurat[["VIPER"]] <- CreateAssayObject(counts = viper_results)
 
-# Set the default assay to VIPER and scale the data
+# Set the default assay to VIPER
 DefaultAssay(integrated_seurat) <- "VIPER"
 
 viper_features <- rownames(integrated_seurat[["VIPER"]])
@@ -274,7 +272,10 @@ best_resolution_viper <- silhouette_results_viper$best_resolution
 
 integrated_seurat <- clusterer_viper$set_best_clusters(best_resolution_viper)
 
-top_genes_viper <- clusterer_viper$find_top_genes()
+top_regulators_viper <- clusterer_viper$find_top_regulators()
+write.csv(top_regulators_viper$all,
+          file.path(viper_output_path, "viper_cluster_markers.csv"),
+          row.names = FALSE)
 
 saveRDS(integrated_seurat,
         file = file.path(base_output_path,
