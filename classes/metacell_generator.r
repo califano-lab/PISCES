@@ -6,7 +6,22 @@ library(ggplot2)
 #' MetacellGenerator Class for Generating Metacell Matrices
 #'
 #' This class provides methods to generate metacell matrices from a Seurat
-#' object, which can be used for ARACNe analysis.
+#' object, which are the input for ARACNe network inference (see the `Runner`
+#' class).
+#'
+#' A metacell is the sum of one cell's counts and the counts of its
+#' `num_neighbors` nearest neighbours within the same cluster. One metacell is
+#' built per cell, so neighbouring metacells share most of their cells. For
+#' that reason the matrix used for ARACNe is a random subsample of `sub_size`
+#' metacells per cluster, normalised to counts per million (CPM):
+#'
+#' - ARACNe3's significance test assumes independent samples; overlapping
+#'   metacells violate that assumption and inflate false-positive edges.
+#'   Subsampling keeps the overlap low for clusters much larger than
+#'   `sub_size`.
+#' - ARACNe3 requires input normalised for sequencing depth (its README, step
+#'   1: "Normalize a gene expression profile for sequencing depth in each
+#'   sample (CPM, TPM, etc.)").
 #'
 #' @field seurat_obj A Seurat object containing the single-cell data.
 #' @field base_output_path A string specifying the base path where output
@@ -30,15 +45,46 @@ MetacellGenerator <- R6Class( # nolint
 
     #' Generate Metacell Matrices for ARACNe Analysis
     #'
-    #' @param out_name      Prefix for the saved metacell matrix files.
-    #' @param size_thresh   Minimum cluster size to consider.
-    #' @param num_neighbors Number of neighbors to use for each metacell.
-    #' @param sub_size      Target number of cells in each metacell.
+    #' For every cluster with more than `size_thresh` cells, builds one
+    #' metacell per cell and writes two versions to `base_output_path`:
     #'
-    #' @return              A list of metacell matrices, one per cluster.
+    #' - `{out_name}_clust-{i}-metaCells_sub.{rds,tsv}`: the ARACNe input.
+    #'   `sub_size` randomly chosen metacells (all of them if the cluster has
+    #'   no more than `sub_size` cells), CPM-normalised. This is the matrix
+    #'   returned for the cluster.
+    #' - `{out_name}_clust-{i}-metaCells_all.{rds,tsv}`: every metacell, as
+    #'   raw summed counts. Written for reference only; it is NOT an ARACNe
+    #'   input (it is neither subsampled nor depth-normalised).
+    #'
+    #' `i` is the position of the cluster among the clusters that were kept
+    #' (1, 2, ...), not its `seurat_clusters` label.
+    #'
+    #' @param out_name      Prefix for the saved metacell matrix files.
+    #' @param size_thresh   Clusters with `size_thresh` cells or fewer are
+    #'                      skipped.
+    #' @param num_neighbors Number of nearest neighbours summed into each
+    #'                      metacell (in addition to the cell itself).
+    #' @param sub_size      Number of metacells kept per cluster for ARACNe,
+    #'                      i.e. the number of samples ARACNe sees. Clusters
+    #'                      with fewer cells keep all of their metacells.
+    #' @param seed          Seed for the random subsample, so that reruns
+    #'                      select the same metacells. The caller's random
+    #'                      number generator state is restored afterwards. Use
+    #'                      `NULL` to draw from the current state instead.
+    #'
+    #' @return              A named list of subsampled, CPM-normalised metacell
+    #'                      matrices (genes x metacells), one per cluster, named
+    #'                      `{out_name}_clust-{i}`. Pass it to `Runner$new()`.
     generate_metacell_matrices =
       function(out_name = "metacell", size_thresh = 50, num_neighbors = 5,
-               sub_size = 200) {
+               sub_size = 200, seed = 42) {
+        self$utils$check_whole_number(sub_size, "sub_size")
+        if (!is.null(seed)) {
+          self$utils$check_whole_number(seed, "seed", minimum = 0)
+          restore_rng <- private$seed_rng(seed)
+          on.exit(restore_rng(), add = TRUE)
+        }
+
         counts_matrix <- as.matrix(self$seurat_obj[["SCT"]]@counts)
         clustering <- self$seurat_obj$seurat_clusters
 
@@ -56,6 +102,30 @@ MetacellGenerator <- R6Class( # nolint
   #                           PRIVATE METHODS                                 #
   #############################################################################
   private = list(
+    #' Seed the RNG and Return a Function That Undoes It
+    #'
+    #' Sets the seed and returns a function that restores the previous
+    #' `.Random.seed` (or removes it if there was none). Callers register it
+    #' with `on.exit()`, so seeding the metacell subsample has no side effect
+    #' on the random numbers the user's session draws afterwards.
+    #'
+    #' @param seed The seed to set.
+    #'
+    #' @return     A function with no arguments that restores the RNG state.
+    seed_rng = function(seed) {
+      global <- globalenv()
+      had_seed <- exists(".Random.seed", envir = global, inherits = FALSE)
+      old_seed <- if (had_seed) get(".Random.seed", envir = global) else NULL
+      set.seed(seed)
+      function() {
+        if (had_seed) {
+          assign(".Random.seed", old_seed, envir = global)
+        } else if (exists(".Random.seed", envir = global, inherits = FALSE)) {
+          rm(".Random.seed", envir = global)
+        }
+      }
+    },
+
     #' Create Metacell Matrices for ARACNe Analysis
     #'
     #' This function takes a gene expression matrix and its corresponding
@@ -67,14 +137,15 @@ MetacellGenerator <- R6Class( # nolint
     #' @param num_neighbors Number of neighbors to use for each metacell.
     #' @param clustering    Vector of cluster labels for each sample in
     #'                      `dat_mat`.
-    #' @param sub_size      Target number of cells in each metacell for ARACNe
-    #'                      analysis.
+    #' @param sub_size      Number of metacells kept per cluster for ARACNe.
     #' @param out_dir       Directory where metacell matrices will be saved.
     #' @param out_name      Prefix for saved metacell matrix files.
-    #' @param size_thresh   Minimum cluster size; clusters smaller than this
-    #'                      will be ignored.
+    #' @param size_thresh   Minimum cluster size; clusters with this many cells
+    #'                      or fewer will be ignored.
     #'
-    #' @return              A list of metacell matrices, one per cluster.
+    #' @return              A named list of subsampled, CPM-normalised metacell
+    #'                      matrices, one per cluster (see
+    #'                      `generate_metacell_matrices()`).
     create_metacell_matrices =
       function(dat_mat, clustering, num_neighbors = 10, sub_size = 200,
                out_dir, out_name = "", size_thresh = 50) {
@@ -98,7 +169,9 @@ MetacellGenerator <- R6Class( # nolint
           for (i in seq_along(clust_mats)) {
             meta_mat <- private$process_cluster(clust_mats[[i]], num_neighbors,
                                                 i, out_dir, out_name, sub_size)
-            meta_mats[[i]] <- meta_mat
+            # The name identifies the cluster's files and, in Runner, its
+            # ARACNe input, ARACNe output directory and regulon files.
+            meta_mats[[paste0(out_name, "_clust-", i)]] <- meta_mat
           }
         } else {
           cat("No valid cluster matrices to process.\n")
@@ -209,11 +282,13 @@ MetacellGenerator <- R6Class( # nolint
 
     #' Process Each Cluster to Generate Metacell Matrix
     #'
-    #' For a given cluster's gene expression matrix, this function generates a
-    #' metacell matrix by considering the specified number of neighbors. It
-    #' saves two versions of the metacell matrix: one with all cells andanother
-    #' with a subset (if the original exceeds the `sub_size`). Both matrices
-    #' are saved to files.
+    #' Builds one metacell per cell of the cluster and saves two versions:
+    #'
+    #' - `{out_name}_clust-{cluster_idx}-metaCells_all`: every metacell, raw
+    #'   summed counts. Reference only, not an ARACNe input.
+    #' - `{out_name}_clust-{cluster_idx}-metaCells_sub`: `sub_size` randomly
+    #'   chosen metacells (all of them if there are no more than `sub_size`),
+    #'   CPM-normalised. This is the ARACNe input and the return value.
     #'
     #' @param mat           A matrix representing the gene expression data for
     #'                      a single cluster.
@@ -223,33 +298,31 @@ MetacellGenerator <- R6Class( # nolint
     #' @param out_dir       The directory where output files will be saved.
     #' @param out_name      A prefix to be added to the names of the output
     #'                      files.
-    #' @param sub_size      The maximum number of cells to include in the
-    #'                      subsetted metacell matrix.
+    #' @param sub_size      Number of metacells kept for ARACNe.
     #'
-    #' @return              A metacell matrix for the cluster, potentially
-    #'                      subsetted and transformed.
+    #' @return              The subsampled, CPM-normalised metacell matrix,
+    #'                      identical to the one saved as `..._sub`.
     process_cluster = function(mat, num_neighbors, cluster_idx, out_dir,
                                out_name, sub_size) {
-      # Generate metacell matrix
+      file_prefix <- paste0(out_name, "_clust-", cluster_idx, "-metaCells")
+
+      # One metacell per cell; neighbouring metacells share most of their
+      # cells. Duplicate gene names are dropped here, once, so the returned
+      # matrix is exactly what is saved (ARACNe3 rejects duplicate genes).
       meta_mat <- private$meta_cells(mat, num_neighbors)
+      meta_mat <- private$remove_duplicate_genes(meta_mat)
 
-      # Save the complete metacell matrix
-      private$save_meta_mat(meta_mat, out_dir,
-                            paste0(out_name, "_clust-", cluster_idx,
-                                   "-metaCells_all"),
-                            subset = FALSE)
+      private$save_meta_mat(meta_mat, out_dir, paste0(file_prefix, "_all"))
 
-      # Subset if necessary and apply CPM transformation
+      # ARACNe input: a random subsample of metacells, which keeps their
+      # overlap low, normalised for sequencing depth.
       if (sub_size < ncol(meta_mat)) {
-        meta_mat <- meta_mat[, sample(colnames(meta_mat), sub_size)]
+        meta_mat <- meta_mat[, sample(colnames(meta_mat), sub_size),
+                             drop = FALSE]
       }
       meta_mat <- private$cpmt_transform(meta_mat)
 
-      # Save the subsetted and transformed metacell matrix
-      private$save_meta_mat(meta_mat, out_dir,
-                            paste0(out_name, "_clust-", cluster_idx,
-                                   "-metaCells"),
-                            subset = TRUE)
+      private$save_meta_mat(meta_mat, out_dir, paste0(file_prefix, "_sub"))
 
       return(meta_mat)
     },
@@ -302,92 +375,48 @@ MetacellGenerator <- R6Class( # nolint
       log2(cpm_mat + 1)
     },
 
-    #' Save Metacell Matrix to File
+    #' Save Metacell Matrix as RDS and TSV
     #'
-    #' Saves a given metacell matrix to a file, constructing the file name from
-    #' the provided directory, file prefix, and an indicator of whether the
-    #' matrix has been subsetted.
+    #' Writes `{out_dir}/{file_prefix}.rds` and `{out_dir}/{file_prefix}.tsv`.
+    #' Both files hold exactly the matrix passed in; no further subsampling
+    #' happens here.
     #'
-    #' @param meta_mat    The metacell matrix to be saved.
-    #' @param out_dir     The directory where the file will be saved.
-    #' @param file_prefix The prefix to be used in constructing the file name.
-    #' @param subset      A boolean flag indicating whether the matrix is a
-    #'                    subsetted version.
+    #' @param meta_mat    The metacell matrix to be saved (genes x metacells).
+    #' @param out_dir     The directory where the files will be saved.
+    #' @param file_prefix The file name without extension.
     #'
-    #' @return            None; the function's primary effect is to write a
-    #'                    file to disk.
-    save_meta_mat = function(meta_mat, out_dir, file_prefix, subset) {
+    #' @return            None; the function's primary effect is to write
+    #'                    files to disk.
+    save_meta_mat = function(meta_mat, out_dir, file_prefix) {
       # Ensure the output directory exists
       if (!dir.exists(out_dir)) {
         dir.create(out_dir, recursive = TRUE)
       }
 
-      file_suffix <- ifelse(subset, "_sub", "_all")
-      file_name <- paste0(out_dir, "/", file_prefix, file_suffix, ".txt")
-
-      private$aracne_table(meta_mat, file_name, subset)
-    },
-
-    #' Save Data Matrix for ARACNe Analysis
-    #'
-    #' Formats and saves a gene expression matrix for use as input to ARACNe,
-    #' optionally subsetting the matrix to a maximum number of samples for
-    #' efficiency.
-    #'
-    #' @param dat_mat  A matrix of data with genes as rows and samples as
-    #'                 columns.
-    #' @param out_file Path and base name for the output file(s).
-    #' @param subset   Logical indicating whether to subset the matrix to 500
-    #'                 samples.
-    aracne_table = function(dat_mat, out_file, subset = TRUE) {
-      dat_mat <- private$remove_duplicate_genes(dat_mat)
-      private$save_matrix_rds(dat_mat, out_file, subset)
-      private$save_matrix_tsv(dat_mat, out_file, subset)
+      out_file <- file.path(out_dir, file_prefix)
+      saveRDS(meta_mat, file = paste0(out_file, ".rds"))
+      private$save_matrix_tsv(meta_mat, out_file)
     },
 
     #' Remove Duplicate Genes from the Matrix
+    #'
+    #' Keeps the first row for each gene name.
     #'
     #' @param dat_mat A matrix with genes as rows and samples as columns.
     #'
     #' @return        Matrix with duplicate genes removed.
     remove_duplicate_genes = function(dat_mat) {
-      dat_mat[!duplicated(rownames(dat_mat)), ]
-    },
-
-    #' Save Matrix as RDS File
-    #'
-    #' @param dat_mat  A matrix with genes as rows and samples as columns.
-    #' @param out_file Base path and name for the output RDS file.
-    #' @param subset   Logical indicating if the matrix should be subsetted.
-    save_matrix_rds = function(dat_mat, out_file, subset) {
-      if (subset) {
-        dat_mat <- private$subset_matrix_samples(dat_mat, 500)
-      }
-      saveRDS(dat_mat, file = paste0(out_file, ".rds"))
-    },
-
-    #' Subset Matrix to a Specific Number of Samples
-    #'
-    #' @param dat_mat     A matrix with genes as rows and samples as columns.
-    #' @param max_samples The maximum number of samples to include in the
-    #'                    subset.
-    #'
-    #' @return            A subsetted matrix.
-    subset_matrix_samples = function(dat_mat, max_samples) {
-      dat_mat[, sample(colnames(dat_mat), min(ncol(dat_mat), max_samples))]
+      dat_mat[!duplicated(rownames(dat_mat)), , drop = FALSE]
     },
 
     #' Save Matrix as TSV File
     #'
+    #' The first row holds "gene" followed by the metacell names; each further
+    #' row holds a gene name followed by its values.
+    #'
     #' @param dat_mat  A matrix with genes as rows and samples as columns.
     #' @param out_file Base path and name for the output TSV file.
-    #' @param subset   Logical indicating if the matrix should be subsetted
-    #'                 before
-    #'                 saving.
-    save_matrix_tsv = function(dat_mat, out_file, subset) {
-      if (subset) {
-        dat_mat <- private$subset_matrix_samples(dat_mat, 500)
-      }
+    save_matrix_tsv = function(dat_mat, out_file) {
       formatted_matrix <- private$format_matrix_for_tsv(dat_mat)
       write.table(formatted_matrix, file = paste0(out_file, ".tsv"),
                   sep = "\t", quote = FALSE, row.names = FALSE,
