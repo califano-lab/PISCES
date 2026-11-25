@@ -95,6 +95,23 @@ Utils <- R6Class( # nolint
       return(non_existent_paths)
     },
 
+    #' Check That an Argument Is a Single Whole Number
+    #'
+    #' Stops with an informative error otherwise.
+    #'
+    #' @param value   The value to check.
+    #' @param name    The argument name, used in the error message.
+    #' @param minimum The smallest accepted value.
+    #'
+    #' @return None.
+    check_whole_number = function(value, name, minimum = 1) {
+      if (!is.numeric(value) || length(value) != 1 || is.na(value) ||
+            value != round(value) || value < minimum) {
+        stop(sprintf("`%s` must be a single whole number >= %d.",
+                     name, minimum))
+      }
+    },
+
     #' Create Multiple Directories
     #'
     #' This function creates multiple directories if they do not already exist.

@@ -8,6 +8,7 @@
     - [2. `compute_distance_matrix()`](#2-compute_distance_matrix)
     - [3. `do_paths_exist()`](#3-do_paths_exist)
     - [4. `create_directories()`](#4-create_directories)
+    - [5. `check_whole_number()`](#5-check_whole_number)
   - [Example Usage](#example-usage)
 - [`Converter` Class](#converter-class)
   - [Overview](#overview-1)
@@ -231,6 +232,32 @@ None (invisibly returns `NULL`). This is a utility method and is primarily invok
 
 **Side Effects**  
 - Creates new directories on the file system.
+
+---
+
+### 5. `check_whole_number()`
+
+**Description**  
+Validates that an argument is a single whole number no smaller than a given minimum, and stops with an informative error otherwise. `MetacellGenerator` and `Runner` use it to check counts such as `sub_size`, `threads`, `seed` and `num_subnets`.
+
+**Usage**  
+```r
+utils$check_whole_number(value, name, minimum = 1)
+```
+
+**Arguments**  
+- `value`  
+  The value to check.  
+- `name`  
+  A **character** string naming the argument, used in the error message.  
+- `minimum`  
+  The smallest accepted value. Defaults to `1`.
+
+**Value / Return**  
+None. Called for its check.
+
+**Side Effects**  
+- Stops with an error such as ``"`num_subnets` must be a single whole number >= 1."`` if the check fails.
 
 ---
 
@@ -1315,7 +1342,14 @@ The **`MetacellGenerator`** class produces **metacell matrices** from single-cel
 - **Dependencies**: `R6`, `Seurat`, `ggplot2`, `reshape2`  
 - **Utilities**: Relies on an internal instance of **`Utils`** for computing distance matrices (used in the metacell construction process).
 
-A “metacell” here is an aggregated cell profile formed by combining the expression of a cell’s nearest neighbors in order to **smooth** and **denoise** single-cell data. You can specify parameters such as how many neighbors to consider, and how large each metacell subset should be for downstream network inference.
+A “metacell” here is an aggregated cell profile formed by summing the counts of a cell and its nearest neighbors in order to **smooth** and **denoise** single-cell data. One metacell is built per cell, so neighboring metacells share most of their cells.
+
+For that reason, the matrix used for ARACNe is **not** the full set of metacells. For each cluster it is a random subsample of `sub_size` metacells (200 by default), normalized to counts per million (CPM):
+
+- **Subsampling** keeps the overlap between metacells low. ARACNe3's significance test assumes independent samples; heavily overlapping metacells violate that assumption and let many false edges through.
+- **CPM normalization** removes differences in sequencing depth between metacells. ARACNe3 requires depth-normalized input: step 1 of its README is *"Normalize a gene expression profile for sequencing depth in each sample (CPM, TPM, etc.)"*, because it rank-transforms each gene across samples, and depth differences would change those ranks.
+
+Subsampling reduces overlap the most when a cluster is much larger than `sub_size`. For clusters only slightly larger than `sub_size`, most metacells are kept and overlap remains.
 
 ---
 
@@ -1363,9 +1397,7 @@ _None._ No metacell generation occurs until `generate_metacell_matrices()` is ca
 ### 2. `generate_metacell_matrices()`
 
 **Description**  
-Produces one metacell matrix **per cluster** from the Seurat object. Can optionally filter out small clusters and specify how many neighbors to use for each metacell. This results in two versions of the matrix per cluster:  
-1. **All cells** (metacells built from the entire cluster).  
-2. **Subset** (metacells with a maximum of `sub_size` columns, if the cluster is large).
+Produces the ARACNe input matrix **per cluster** from the Seurat object: `sub_size` randomly chosen metacells, CPM-normalized (see the [overview](#metacellgenerator-class) for why). It also saves every metacell of the cluster, as raw counts, for reference.
 
 **Usage**  
 ```r
@@ -1373,38 +1405,41 @@ metacell_matrices <- metacell_gen$generate_metacell_matrices(
   out_name = "metacell",
   size_thresh = 50,
   num_neighbors = 5,
-  sub_size = 200
+  sub_size = 200,
+  seed = 42
 )
 ```
 
 **Arguments**  
 - `out_name`  
-  A **character** string used as the file prefix when saving metacell matrices. Defaults to `"metacell"`.
+  A **character** string used as the file prefix when saving metacell matrices, and in the names of the returned list. Defaults to `"metacell"`.
 - `size_thresh`  
-  A **numeric** specifying the minimum cluster size to process. Clusters smaller than this are skipped. Defaults to `50`.
+  A **numeric** cluster-size cutoff: clusters with `size_thresh` cells **or fewer** are skipped. Defaults to `50`.
 - `num_neighbors`  
-  A **numeric** controlling how many nearest neighbors to aggregate for each cell in building a metacell. Defaults to `5`.
+  A **numeric** controlling how many nearest neighbors are summed with each cell to build its metacell. Defaults to `5` (six cells per metacell).
 - `sub_size`  
-  A **numeric** specifying the maximum number of columns (cells) in the final “subset” matrix. If the cluster’s metacell matrix has more columns than `sub_size`, it is randomly downsampled. Defaults to `200`.
+  A **whole number**: how many metacells are kept per cluster for ARACNe, i.e. the number of samples ARACNe sees for that cluster. Clusters with no more than `sub_size` cells keep all of their metacells. Defaults to `200`.
+- `seed`  
+  A **whole number** seeding the random subsample, so reruns select the same metacells. Your session's random number stream is restored afterwards, so this has no effect on later random draws. Use `NULL` to draw from the session's current random state instead. Defaults to `42`.
 
 **Details**  
 1. **Extracts** expression data (`["SCT"]@counts`) and cluster labels (`seurat_clusters`).  
-2. **Groups** cells by cluster, skipping those below `size_thresh`.  
-3. **Builds** metacells by summing the expression of each cell with its `num_neighbors` nearest neighbors (based on **1 - Pearson correlation**).  
-4. **Generates** and saves two versions for each cluster:
-   - “all” metacells (no column downsampling).  
-   - “sub” version (downsampled if more than `sub_size` columns).  
-   - Each is saved both as `.rds` and `.tsv` (ARACNe-friendly).  
-5. Returns a **list** of the final subset metacell matrices (one per cluster).
+2. **Groups** cells by cluster, skipping clusters with `size_thresh` cells or fewer.  
+3. **Builds** one metacell per cell by summing the counts of the cell and its `num_neighbors` nearest neighbors within the cluster (distance: **1 - Pearson correlation**).  
+4. **Saves** every metacell, as raw summed counts, as the `_all` files. These are for reference only and are not used by ARACNe.  
+5. **Subsamples** `sub_size` metacells at random (if the cluster has more), **normalizes** them to CPM, and saves them as the `_sub` files.  
+6. **Returns** the `_sub` matrices.
 
 **Value / Return**  
-- A **list** of metacell matrices (the “subset” versions) for each cluster.
+- A **named list** with one matrix (genes x metacells) per kept cluster: the subsampled, CPM-normalized metacells, identical to the `_sub` files. The names are `"{out_name}_clust-{i}"`.  
+- Pass this list to [`Runner$new()`](#runner-class) as `metacell_mat`; ARACNe runs on exactly these matrices.
 
 **Side Effects**  
-- Multiple files are written to **`base_output_path`**:
-  - `"{out_name}_clust-{i}-metaCells_all.rds"`, `"{out_name}_clust-{i}-metaCells_all.tsv"`, …  
-  - `"{out_name}_clust-{i}-metaCells_sub.rds"`, `"{out_name}_clust-{i}-metaCells_sub.tsv"`, …
-- Prints warnings or skips clusters that fail the size threshold or other checks.
+- Four files per cluster are written to **`base_output_path`**:
+  - `"{out_name}_clust-{i}-metaCells_sub.rds"` and `".tsv"`: the ARACNe input, as returned.  
+  - `"{out_name}_clust-{i}-metaCells_all.rds"` and `".tsv"`: every metacell, raw counts, for reference only.  
+- `i` numbers the clusters that were kept (1, 2, ...). It is **not** the `seurat_clusters` label.  
+- The `.tsv` files have a header row `gene` followed by the metacell (cell) names.
 
 ---
 
@@ -1426,19 +1461,22 @@ metacell_gen <- MetacellGenerator$new(
 )
 
 # 3. Create metacell matrices:
-#    - Only consider clusters >= 50 cells
-#    - Each cell is aggregated with 5 neighbors
-#    - Subset final matrix columns to at most 200
+#    - Only consider clusters with more than 50 cells
+#    - Each cell is summed with its 5 nearest neighbors
+#    - Keep 200 randomly chosen metacells per cluster for ARACNe
+#    - Seed the choice so reruns select the same metacells
 metacell_matrices <- metacell_gen$generate_metacell_matrices(
   out_name = "my_metacells",
   size_thresh = 50,
   num_neighbors = 5,
-  sub_size = 200
+  sub_size = 200,
+  seed = 42
 )
 
-# 4. Check the returned list of subsetted metacell matrices
-names(metacell_matrices)  # Should list cluster indices or IDs
-head(metacell_matrices[[1]])  # Inspect the first cluster's matrix
+# 4. Check the returned list: one CPM-normalized matrix per cluster
+names(metacell_matrices)      # "my_metacells_clust-1", "my_metacells_clust-2", ...
+sapply(metacell_matrices, ncol)  # 200, or fewer for clusters under 200 cells
+colSums(metacell_matrices[[1]])[1:3]  # each metacell sums to 1e6 (CPM)
 
 # 5. Cleanup if desired
 rm(metacell_gen)
@@ -1466,6 +1504,8 @@ A typical usage scenario is that you’ve already generated **metacell matrices*
 2. Convert the results to **regulon** objects.  
 3. Run **VIPER** to get regulon activity scores, which can be integrated into your Seurat object for further analysis.
 
+ARACNe runs on **exactly the matrices passed to the Runner**: the list returned by `generate_metacell_matrices()`, i.e. the subsampled, CPM-normalized metacells of each cluster. `Runner` does not search the output folder for input files, and `run_viper()` reads only the networks produced for those matrices, so files left behind by earlier runs are never mixed in.
+
 ---
 
 ## Public Methods
@@ -1476,7 +1516,7 @@ A typical usage scenario is that you’ve already generated **metacell matrices*
 Constructs a new `Runner` object with all the parameters required for ARACNe–VIPER analysis, including:
 
 - Paths to ARACNe binary, regulator files, and output directories.  
-- The metacell matrix (or list of them) to be analyzed.  
+- The metacell matrices to be analyzed.  
 - The Seurat object from which you’ll extract expression data for VIPER.
 
 **Usage**  
@@ -1490,13 +1530,14 @@ runner <- Runner$new(
   seurat_obj,
   viper_output_path,
   threads = 4,
-  seed = 42
+  seed = 42,
+  num_subnets = 1
 )
 ```
 
 **Arguments**  
 - `metacell_mat`  
-  A **list** (or single object) representing the metacell matrices. Each element typically corresponds to a specific cluster’s metacell data, if you have multiple.  
+  The **named list** of metacell matrices returned by [`generate_metacell_matrices()`](#2-generate_metacell_matrices). Each matrix (numeric, genes x metacells, with unique gene names) is used as-is as one ARACNe input, and its name identifies that input's files.  
 - `base_output_path`  
   A **character** string for the overall output folder.  
 - `aracne_binary_path`  
@@ -1517,12 +1558,14 @@ runner <- Runner$new(
 - `viper_output_path`  
   A **character** specifying where VIPER outputs should be written.  
 - `threads`  
-  A **numeric** indicating how many parallel threads ARACNe can use. Defaults to `4`.  
+  A **whole number** of threads ARACNe can use. Defaults to `4`.  
 - `seed`  
-  A **numeric** seed for reproducibility. Defaults to `42`.
+  A **whole number** seed passed to ARACNe3 for reproducibility. Defaults to `42`.  
+- `num_subnets`  
+  A **whole number**: how many subnetworks ARACNe3 builds and consolidates into each network (ARACNe3's `-x` option). Each subnetwork is inferred from a different random 63% of the metacells, and the consolidated network scores every edge by how many subnetworks recovered it. Defaults to `1`, ARACNe3's own default. With `1`, every edge of the consolidated network has the same p-value; larger values (e.g. `10`) give more robust networks and informative edge p-values, at a run time proportional to `num_subnets`. VIPER uses only the regulator, target and mutual-information columns, so it runs with any value.
 
 **Details**  
-- Stores all parameters in fields for subsequent steps.  
+- Validates `threads`, `seed` and `num_subnets`, then stores all parameters in fields for subsequent steps.  
 - If you have multiple regulator files, ARACNe will be run for each regulator set.
 
 **Value / Return**  
@@ -1536,7 +1579,7 @@ _None._ Actual computation happens in `run_aracne()` and `run_viper()`.
 ### 2. `run_aracne()`
 
 **Description**  
-Executes the ARACNe pipeline on your metacell matrices. For each expression file and each regulator file, ARACNe is invoked. Results (network files, `.tsv`) are saved to **`aracne_output_path`** under subfolders named after the regulator set + matrix name.
+Runs ARACNe3 on each metacell matrix in `metacell_mat`, once per regulator set. Results are saved to **`aracne_output_path`** under subfolders named after the regulator set and matrix name.
 
 **Usage**  
 ```r
@@ -1547,17 +1590,18 @@ runner$run_aracne()
 _None._ (Uses fields set during `initialize()`.)
 
 **Details**  
-1. **Verifies** that `metacell_mat` is not empty.  
-2. **Locates** or processes expression files (`_all_all.txt.tsv` by default).  
-3. **Runs** ARACNe using a system call to `aracne_binary_path`.  
-4. Creates an output directory for each combination of expression file x regulator set.  
-5. The user should check the console/logs for ARACNe’s progress and results.
+1. **Validates** `metacell_mat` (a non-empty, uniquely named list of numeric matrices with unique gene names) and `regulator_files` (uniquely named, files exist).  
+2. **Writes** each matrix to `{aracne_output_path}/{name}_for_aracne.tsv` in ARACNe3's input format: a header line with an empty first cell followed by the metacell names, then one line per gene.  
+3. For each regulator set `reg`, **clears** the folder `{aracne_output_path}/{reg}_{name}/` (so no files from an earlier run remain) and **runs** ARACNe3 into it:  
+   `ARACNe3 -e <input> -r <regulators> -o <folder> --threads <threads> --seed <seed> -x <num_subnets>`  
+4. **Stops** with an error if ARACNe3 exits with a non-zero status or does not write its consolidated network.
 
 **Value / Return**  
-_None._ Results are written to disk in subfolders of `aracne_output_path`.
+_None._ Results are written to disk in subfolders of `aracne_output_path`; the network used downstream is `{reg}_{name}/consolidated-net_defaultid.tsv`.
 
 **Side Effects**  
-- If `metacell_mat` is empty, raises an error and stops.
+- Writes the ARACNe input files and output folders described above.  
+- ARACNe3 caches its null model in a hidden `.ARACNe3_cached` folder in the current working directory and reuses it for inputs with the same number of metacells.
 
 ---
 
@@ -1576,17 +1620,17 @@ _None._ (Uses fields set during `initialize()`.)
 
 **Details**  
 1. **Extracts** the integrated expression matrix from `seurat_obj` (via `GetAssayData`).  
-2. **Scans** `aracne_output_path` for ARACNe result files (by pattern).  
-3. **Converts** each ARACNe file into a regulon object (`aracne2regulon`).  
-4. **Prunes** the regulon (optional step for refinement).  
-5. **Runs** `viper()` to compute regulatory activity scores.  
+2. **Reads** the consolidated network of every (regulator set, metacell matrix) pair of this Runner, i.e. the networks `run_aracne()` produced. Other files in `aracne_output_path` are ignored.  
+3. **Converts** each network into a regulon object (`aracne2regulon`), saved to `base_output_path` as `{reg}_{name}_unpruned.rds`.  
+4. **Prunes** each regulon with `viper::pruneRegulon(regulon, 50, adaptive = TRUE)`, which keeps the strongest targets up to an effective regulon size of 50, saved as `{reg}_{name}_pruned.rds`.  
+5. **Runs** `viper()` with all pruned regulons to compute regulatory activity scores.  
 6. Saves the final viper scores as **`viper_results.rds`** in `viper_output_path`.
 
 **Value / Return**  
 _None._ The main result is `viper_results.rds` on disk.
 
 **Side Effects**  
-- If no ARACNe output is found, it halts with an error.  
+- If any expected network is missing, it halts with an error listing the missing files and asking you to run `run_aracne()` first.  
 - The user can read the results into R by:  
   ```r
   viper_res <- readRDS(file.path(viper_output_path, "viper_results.rds"))
@@ -1602,13 +1646,9 @@ _None._ The main result is `viper_results.rds` on disk.
 # Example: Running ARACNe and VIPER on metacell data
 # ---------------------------------------------------------------
 
-# 1. Suppose we have a list of metacell matrices, each from different clusters
-#    or different conditions
-metacell_matrices <- list(
-  cluster1_matrix,
-  cluster2_matrix,
-  ...
-)
+# 1. Metacell matrices from the MetacellGenerator: a named list with one
+#    subsampled, CPM-normalized matrix per cluster
+metacell_matrices <- metacell_gen$generate_metacell_matrices()
 
 # 2. And we have a Seurat object for which we want to run VIPER
 seurat_obj <- integrated_seurat
@@ -1630,12 +1670,14 @@ runner <- Runner$new(
   seurat_obj = seurat_obj,
   viper_output_path = "/path/to/output/viper_results",
   threads = 4,
-  seed = 42
+  seed = 42,
+  num_subnets = 1  # e.g. 10 for more robust networks and edge p-values
 )
 
 # 5. Run ARACNe
 runner$run_aracne()
-# ARACNe output is placed in /path/to/output/aracne_results/...
+# Networks are placed in /path/to/output/aracne_results/{reg}_{name}/, e.g.
+# /path/to/output/aracne_results/tfs_metacell_clust-1/consolidated-net_defaultid.tsv
 
 # 6. Run VIPER
 runner$run_viper()

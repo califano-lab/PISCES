@@ -184,6 +184,9 @@ rm(Clusterer, clusterer)
 # Step 5: Generating Metacell Matrices
 # =============================================================================
 
+#' @note For each cluster this returns `sub_size` (default 200) randomly chosen
+#' metacells, CPM-normalised: these are the ARACNe inputs used in Step 6. The
+#' subsample is seeded (`seed = 42`), so reruns select the same metacells.
 generator <- MetacellGenerator$new(integrated_seurat, base_output_path)
 metacell_matrices <- generator$generate_metacell_matrices()
 
@@ -202,9 +205,15 @@ rm(MetacellGenerator, generator)
 # Step 6: Running ARACNe and VIPER Analysis (No action necessary)
 # =============================================================================
 
+#' @note ARACNe runs on exactly the metacell matrices from Step 5.
+#' `num_subnets` is ARACNe3's `-x`: the number of subnetworks (each from a
+#' random 63% of the metacells) consolidated into each network. 1 is ARACNe3's
+#' default; larger values give more robust networks and edge p-values, at a
+#' proportional cost in run time.
 runner <- Runner$new(
   metacell_matrices, base_output_path, aracne_binary_path, aracne_output_path,
-  regulator_files, integrated_seurat, viper_output_path, threads = 4, seed = 42
+  regulator_files, integrated_seurat, viper_output_path, threads = 4, seed = 42,
+  num_subnets = 1
 )
 
 runner$run_aracne()

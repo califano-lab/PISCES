@@ -46,9 +46,10 @@ The **`main_workflow.r`** script provides a **comprehensive pipeline** for analy
 
 5. **Generates Metacells**  
    - Constructs aggregated cell profiles (“metacells”) for each cluster, reducing noise and enhancing signal for downstream regulatory network analysis.
+   - For each cluster, keeps a seeded random subsample of 200 metacells (by default), normalized to counts per million, as the ARACNe input. Subsampling limits the overlap between metacells, and normalization removes sequencing-depth differences, both of which ARACNe3 requires.
 
 6. **Runs ARACNe and VIPER**  
-   - Utilizes **ARACNe3** to infer gene regulatory networks from the metacell expression.
+   - Utilizes **ARACNe3** to infer gene regulatory networks from exactly those metacell matrices, one network per cluster and regulator set.
    - Converts ARACNe outputs into regulon objects and applies **VIPER** to compute regulator activity scores.
 
 Each major step is encapsulated in a dedicated R6 class—e.g., `Loader` for data loading, `Preprocessor` for QC and normalization, `Clusterer` for clustering, `Plotter` for visualization, `MetacellGenerator` for creating metacells, and `Runner` for ARACNe/VIPER. By editing the **`main_workflow.r`** script’s configuration sections (e.g., paths, metadata), you can tailor every stage of the pipeline to your specific data and experimental needs.
@@ -292,6 +293,14 @@ We welcome contributions to improve and enhance the `standard-workflow`. If you 
 
 4. **Make Changes**:
    - Implement your changes in the new branch. Make sure your code follows the project's coding standards and includes appropriate comments.
+   - Run the test suite from the repository root (it needs `testthat`, `R6` and `Seurat`; the VIPER tests also need `viper`):
+     ```sh
+     Rscript tests/run_tests.r
+     ```
+     The end-to-end tests with a real ARACNe3 build also run when `ARACNE3_BIN` points to the executable:
+     ```sh
+     ARACNE3_BIN=/path/to/ARACNe3_app_release Rscript tests/run_tests.r
+     ```
 
 5. **Commit Changes**:
    - Commit your changes with a descriptive commit message:
